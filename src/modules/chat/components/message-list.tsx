@@ -18,9 +18,10 @@ interface MessageListProps {
 export function MessageList({ messages, isStreaming, isBootstrap }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const lastContent = messages[messages.length - 1]?.content;
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, messages[messages.length - 1]?.content]);
+  }, [messages.length, lastContent]);
 
   if (messages.length === 0) {
     return (

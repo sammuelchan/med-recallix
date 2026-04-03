@@ -141,7 +141,9 @@ export const ChatService = {
           timestamp: new Date().toISOString(),
         });
 
-        runPostReplyTasks(userId, sessionId, _userMessage, text, config).catch(() => {});
+        runPostReplyTasks(userId, sessionId, _userMessage, text, config).catch(
+          (e) => console.error("[PostReplyTasks]", e),
+        );
       },
     });
   },
@@ -285,14 +287,19 @@ ${oldText.slice(0, 3000)}
       maxRetries: 1,
     });
 
-    const newSummary = session.summary
-      ? `${session.summary}\n\n---\n\n${result.text.trim()}`
+    const freshSession = await kvGet<ChatSession>(
+      kvKeys.chatSession(userId, sessionId),
+    );
+    if (!freshSession || freshSession.messages.length < COMPACTION_THRESHOLD) return;
+
+    const newSummary = freshSession.summary
+      ? `${freshSession.summary}\n\n---\n\n${result.text.trim()}`
       : result.text.trim();
 
-    session.summary = newSummary.slice(-2000);
-    session.messages = session.messages.slice(-COMPACTION_KEEP_RECENT);
+    freshSession.summary = newSummary.slice(-2000);
+    freshSession.messages = freshSession.messages.slice(-COMPACTION_KEEP_RECENT);
 
-    await kvPut(kvKeys.chatSession(userId, sessionId), session);
+    await kvPut(kvKeys.chatSession(userId, sessionId), freshSession);
   } catch {
     // non-critical
   }

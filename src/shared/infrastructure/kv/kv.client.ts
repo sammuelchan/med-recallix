@@ -50,7 +50,12 @@ export async function kvGet<T>(
 ): Promise<T | null> {
   const raw = await getAdapter(ns).get(key);
   if (raw === null) return null;
-  return JSON.parse(raw) as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    console.error(`[KV] Failed to parse JSON for key "${key}"`);
+    return null;
+  }
 }
 
 export async function kvPut<T>(

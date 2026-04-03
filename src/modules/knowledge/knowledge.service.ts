@@ -1,5 +1,5 @@
 import { kvGet, kvPut, kvDelete, kvKeys } from "@/shared/infrastructure/kv";
-import { generateId, toISODateString } from "@/shared/lib/utils";
+import { generateId } from "@/shared/lib/utils";
 import { NotFoundError } from "@/shared/lib/errors";
 import type {
   KnowledgePoint,

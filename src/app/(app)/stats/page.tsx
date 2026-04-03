@@ -54,14 +54,39 @@ function WeekChart({ days }: { days: StatsData["recentDays"] }) {
 
 export default function StatsPage() {
   const [data, setData] = useState<StatsData | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch("/api/stats")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("fetch failed");
+        return r.json();
+      })
       .then((json) => {
         if (json.success) setData(json.data);
-      });
+        else setError(true);
+      })
+      .catch(() => setError(true));
   }, []);
+
+  if (error) {
+    return (
+      <>
+        <Header title="学习统计" />
+        <PageContainer>
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-muted-foreground">
+            <p>加载失败</p>
+            <button
+              onClick={() => { setError(false); window.location.reload(); }}
+              className="text-sm text-primary underline"
+            >
+              重试
+            </button>
+          </div>
+        </PageContainer>
+      </>
+    );
+  }
 
   if (!data) {
     return (

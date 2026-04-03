@@ -23,7 +23,12 @@ export async function POST(req: NextRequest) {
     if (!userId)
       return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
-    const body = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ success: false, error: "请求格式有误" }, { status: 400 });
+    }
     const input = SendMessageSchema.parse(body);
 
     const session = await ChatService.getOrCreateSession(userId, input.sessionId);

@@ -15,13 +15,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetch("/api/cards?status=summary")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("fetch failed");
+        return r.json();
+      })
       .then((json) => {
         if (json.success) {
           setSummary(json.data.summary);
           setStreak(json.data.streak);
         }
-      });
+      })
+      .catch(() => {});
   }, []);
 
   const totalDue = summary ? summary.due + summary.overdue + summary.newToday : 0;

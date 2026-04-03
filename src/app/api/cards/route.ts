@@ -18,11 +18,14 @@ export async function GET(req: NextRequest) {
     }
 
     if (isSummary) {
-      const summary = await ReviewService.getDueSummary(userId);
-      const streak = await ReviewService.getStreak(userId);
+      const [summary, streak, deck] = await Promise.all([
+        ReviewService.getDueSummary(userId),
+        ReviewService.getStreak(userId),
+        ReviewService.getDeck(userId),
+      ]);
       return NextResponse.json({
         success: true,
-        data: { ...summary, total: (await ReviewService.getDeck(userId)).cards.length, ...streak },
+        data: { summary: { ...summary, total: deck.cards.length }, streak },
       });
     }
 

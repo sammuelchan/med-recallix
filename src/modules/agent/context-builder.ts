@@ -22,8 +22,8 @@ function formatProfileBlock(profile: Awaited<ReturnType<typeof ProfileService.ge
       : null,
     `- 每日目标（分钟）：${profile.dailyGoal}`,
     `- 难度偏好：${profile.difficultyPreference}`,
-    `- 较强科目：${profile.strongSubjects.join("、") || "（未填）"}`,
-    `- 薄弱科目：${profile.weakSubjects.join("、") || "（未填）"}`,
+    `- 较强科目：${(profile.strongSubjects ?? []).join("、") || "（未填）"}`,
+    `- 薄弱科目：${(profile.weakSubjects ?? []).join("、") || "（未填）"}`,
     profile.learningStyle ? `- 学习风格：${profile.learningStyle}` : null,
   ].filter(Boolean);
   return lines.join("\n");

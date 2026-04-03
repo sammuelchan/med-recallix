@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/shared/components/layout";
 import { PageContainer } from "@/shared/components/layout";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { RotateCcw, Check } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import type { Card, ReviewGrade } from "@/modules/review";
 
 const GRADE_OPTIONS: { grade: ReviewGrade; label: string; desc: string; color: string }[] = [
@@ -52,12 +52,15 @@ export default function ReviewPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (currentCard) {
+  const currentCardId = currentCard?.id;
+  const prevCardIdRef = useRef<string | undefined>(undefined);
+  if (currentCardId !== prevCardIdRef.current) {
+    prevCardIdRef.current = currentCardId;
+    if (currentCardId) {
       setKpContent("");
       setFlipped(false);
     }
-  }, [currentCard]);
+  }
 
   async function handleFlip() {
     if (!flipped && currentCard) {
@@ -66,23 +69,38 @@ export default function ReviewPage() {
     setFlipped(!flipped);
   }
 
+  const [gradeError, setGradeError] = useState("");
+
   async function handleGrade(grade: ReviewGrade) {
     if (!currentCard || grading) return;
     setGrading(true);
+    setGradeError("");
 
-    await fetch(`/api/cards/${currentCard.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ grade }),
-    });
+    try {
+      const res = await fetch(`/api/cards/${currentCard.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grade }),
+      });
 
-    setReviewed((prev) => prev + 1);
-    setGrading(false);
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({ error: "评分提交失败" }));
+        setGradeError(json.error ?? "评分提交失败，请重试");
+        setGrading(false);
+        return;
+      }
 
-    if (currentIdx + 1 < cards.length) {
-      setCurrentIdx((prev) => prev + 1);
-    } else {
-      setDone(true);
+      setReviewed((prev) => prev + 1);
+
+      if (currentIdx + 1 < cards.length) {
+        setCurrentIdx((prev) => prev + 1);
+      } else {
+        setDone(true);
+      }
+    } catch {
+      setGradeError("网络错误，请重试");
+    } finally {
+      setGrading(false);
     }
   }
 
@@ -167,6 +185,10 @@ export default function ReviewPage() {
               </div>
             )}
           </div>
+
+          {gradeError && (
+            <p className="text-sm text-destructive text-center">{gradeError}</p>
+          )}
 
           {flipped && (
             <div className="space-y-2">

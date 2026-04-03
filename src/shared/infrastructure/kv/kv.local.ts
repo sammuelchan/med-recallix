@@ -18,9 +18,9 @@ async function initModules(): Promise<void> {
   if (_initPromise) return _initPromise;
   _initPromise = (async () => {
     try {
-      _fs = await import("node:fs");
-      _path = await import("node:path");
-      _os = await import("node:os");
+      _fs = await import(/* turbopackIgnore: true */ "node:fs");
+      _path = await import(/* turbopackIgnore: true */ "node:path");
+      _os = await import(/* turbopackIgnore: true */ "node:os");
     } catch {
       // Edge Runtime — no filesystem
     }

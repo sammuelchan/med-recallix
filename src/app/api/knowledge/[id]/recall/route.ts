@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
 import { KnowledgeService } from "@/modules/knowledge";
+import { AppError } from "@/shared/lib/errors";
 
 export async function GET(
   req: NextRequest,
@@ -33,7 +34,9 @@ export async function GET(
         reviewHistory: card?.reviewHistory ?? [],
       },
     });
-  } catch {
-    return NextResponse.json({ success: false, error: "知识点不存在" }, { status: 404 });
+  } catch (err) {
+    if (err instanceof AppError)
+      return NextResponse.json(err.toJSON(), { status: err.status });
+    return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
   }
 }

@@ -66,7 +66,7 @@ export const MemoryService = {
     const { entries } = await this.getMemory(userId);
     const lowered = keywords.map((k) => k.toLowerCase());
     return entries.filter((e) =>
-      lowered.some((kw) => e.content.toLowerCase().includes(kw)),
+      e.content && lowered.some((kw) => e.content.toLowerCase().includes(kw)),
     );
   },
 };

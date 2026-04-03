@@ -50,31 +50,44 @@ export function useChatStream() {
 
   useEffect(() => {
     fetch("/api/profile")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("fetch failed");
+        return r.json();
+      })
       .then((json) => {
         if (json.success) {
           const has = json.data.hasProfile;
           setProfileReady(has);
           if (!has) setIsBootstrap(true);
+        } else {
+          setProfileReady(true);
         }
       })
-      .catch(() => setProfileReady(true));
+      .catch(() => {
+        setProfileReady(true);
+      });
   }, []);
 
   const loadSessions = useCallback(async () => {
-    const res = await fetch("/api/chat");
-    const json = await res.json();
-    if (json.success) setSessions(json.data);
+    try {
+      const res = await fetch("/api/chat");
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) setSessions(json.data);
+    } catch { /* silent */ }
   }, []);
 
   const loadHistory = useCallback(async (sid: string) => {
-    const res = await fetch(`/api/chat/${sid}`);
-    const json = await res.json();
-    if (json.success) {
-      setMessages(json.data);
-      setSessionId(sid);
-      setIsBootstrap(false);
-    }
+    try {
+      const res = await fetch(`/api/chat/${sid}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) {
+        setMessages(json.data);
+        setSessionId(sid);
+        setIsBootstrap(false);
+      }
+    } catch { /* silent */ }
   }, []);
 
   const startNewChat = useCallback(() => {

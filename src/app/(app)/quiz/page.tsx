@@ -32,7 +32,7 @@ export default function QuizPage() {
   function toggleSelect(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
@@ -54,6 +54,7 @@ export default function QuizPage() {
 
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
+      if (!json.data?.length) throw new Error("AI 未能生成有效题目，请重试");
 
       setQuestions(json.data);
       setCurrentQ(0);
@@ -214,7 +215,7 @@ export default function QuizPage() {
                 {score}/{questions.length}
               </h2>
               <p className="text-muted-foreground mt-1">
-                正确率 {Math.round((score / questions.length) * 100)}%
+                正确率 {questions.length > 0 ? Math.round((score / questions.length) * 100) : 0}%
               </p>
             </div>
             <div className="flex gap-2">

@@ -12,7 +12,6 @@ interface MessageBubbleProps {
 export function MessageBubble({
   role,
   content,
-  timestamp,
   isStreaming,
 }: MessageBubbleProps) {
   const isUser = role === "user";

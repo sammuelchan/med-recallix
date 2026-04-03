@@ -1,5 +1,6 @@
 import { kvGet, kvPut, kvKeys } from "@/shared/infrastructure/kv";
 import { generateId, toISODateString } from "@/shared/lib/utils";
+import { NotFoundError } from "@/shared/lib/errors";
 import { calculateNextReview, createCard, isDue } from "./sm2";
 import { EpisodeService } from "@/modules/agent";
 import type { Card, Deck, StreakData, DueSummary, ReviewGrade } from "./review.types";
@@ -40,7 +41,7 @@ export const ReviewService = {
   ): Promise<Card> {
     const deck = await this.getDeck(userId);
     const idx = deck.cards.findIndex((c) => c.id === cardId);
-    if (idx < 0) throw new Error("卡片不存在");
+    if (idx < 0) throw new NotFoundError("卡片");
 
     const updated = calculateNextReview(deck.cards[idx], grade);
     if (!updated.reviewHistory) updated.reviewHistory = [];
