@@ -1,25 +1,54 @@
-function getNamespace(ns: "config" | "data"): KVNamespace {
+/**
+ * KV Storage Abstraction Layer
+ *
+ * Priority chain:
+ *   1. EdgeOne KV binding (production)  — global vars MED_CONFIG / MED_DATA
+ *   2. Local file storage (dev)         — ~/.med-recallix/kv/{namespace}/{key}.json
+ *   3. In-memory Map (dev fallback)     — volatile, lost on restart
+ */
+
+import { getFileKV } from "./kv.local";
+
+interface KVAdapter {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+  list(options?: { prefix?: string; limit?: number }): Promise<string[]>;
+}
+
+function wrapEdgeOneKV(binding: EdgeOneKV): KVAdapter {
+  return {
+    get: (key) => binding.get(key),
+    put: (key, value) => binding.put(key, value),
+    delete: (key) => binding.delete(key),
+    async list(options) {
+      const result = await binding.list({
+        prefix: options?.prefix,
+        limit: options?.limit ?? 256,
+      });
+      return result.keys.map((k) => k.key);
+    },
+  };
+}
+
+function getAdapter(ns: "config" | "data"): KVAdapter {
   const binding =
     ns === "config"
-      ? (globalThis as Record<string, unknown>).MY_KV_NAMESPACE
-      : (globalThis as Record<string, unknown>).MY_KV_NAMESPACE_DATA;
+      ? (globalThis as Record<string, unknown>).MED_CONFIG
+      : (globalThis as Record<string, unknown>).MED_DATA;
 
-  if (!binding) {
-    if (process.env.NODE_ENV === "development") {
-      const { getDevKV } = require("./kv.mock") as typeof import("./kv.mock");
-      return getDevKV(ns);
-    }
-    throw new Error(`KV namespace "${ns}" not bound. Check edgeone.json.`);
+  if (binding) {
+    return wrapEdgeOneKV(binding as EdgeOneKV);
   }
 
-  return binding as KVNamespace;
+  return getFileKV(ns === "config" ? "med_config" : "med_data");
 }
 
 export async function kvGet<T>(
   key: string,
   ns: "config" | "data" = "data",
 ): Promise<T | null> {
-  const raw = await getNamespace(ns).get(key);
+  const raw = await getAdapter(ns).get(key);
   if (raw === null) return null;
   return JSON.parse(raw) as T;
 }
@@ -29,20 +58,19 @@ export async function kvPut<T>(
   value: T,
   ns: "config" | "data" = "data",
 ): Promise<void> {
-  await getNamespace(ns).put(key, JSON.stringify(value));
+  await getAdapter(ns).put(key, JSON.stringify(value));
 }
 
 export async function kvDelete(
   key: string,
   ns: "config" | "data" = "data",
 ): Promise<void> {
-  await getNamespace(ns).delete(key);
+  await getAdapter(ns).delete(key);
 }
 
 export async function kvList(
   prefix: string,
   ns: "config" | "data" = "data",
 ): Promise<string[]> {
-  const result = await getNamespace(ns).list({ prefix });
-  return result.keys.map((k) => k.name);
+  return getAdapter(ns).list({ prefix });
 }

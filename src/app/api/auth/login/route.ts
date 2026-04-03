@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { login, LoginSchema, buildCookieHeader } from "@/modules/auth";
 import { AppError } from "@/shared/lib/errors";
 
-export const runtime = "edge";
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

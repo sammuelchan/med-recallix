@@ -15,5 +15,6 @@ export const kvKeys = {
 
 export const CONFIG_KEYS = {
   aiConfig: "ai_config",
+  appSecrets: "app_secrets",
   inviteCode: "invite_code",
 } as const;

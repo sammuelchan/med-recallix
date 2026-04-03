@@ -1,20 +1,23 @@
 declare namespace NodeJS {
   interface ProcessEnv {
-    JWT_SECRET: string;
+    JWT_SECRET?: string;
     NEXT_PUBLIC_APP_URL?: string;
+    MED_RECALLIX_HOME?: string;
   }
 }
 
-declare const MY_KV_NAMESPACE: KVNamespace | undefined;
-declare const MY_KV_NAMESPACE_DATA: KVNamespace | undefined;
+declare const MED_CONFIG: EdgeOneKV | undefined;
+declare const MED_DATA: EdgeOneKV | undefined;
 
-interface KVNamespace {
+interface EdgeOneKV {
   get(key: string): Promise<string | null>;
-  put(key: string, value: string): Promise<void>;
+  get(key: string, type: "json"): Promise<unknown | null>;
+  get(key: string, options: { type: string }): Promise<unknown | null>;
+  put(key: string, value: string | ArrayBuffer | ArrayBufferView | ReadableStream): Promise<void>;
   delete(key: string): Promise<void>;
   list(options?: { prefix?: string; limit?: number; cursor?: string }): Promise<{
-    keys: { name: string }[];
-    cursor?: string;
-    list_complete: boolean;
+    keys: { key: string }[];
+    cursor: string | null;
+    complete: boolean;
   }>;
 }

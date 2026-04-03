@@ -1,18 +1,34 @@
 # Med-Recallix 项目进度
 
 ## 当前状态
-- **当前阶段**: Phase 3 - 任务规划 ✅ → Phase 4 - 编码执行（待开始）
-- **当前角色**: task-planner → spec-coder
+- **当前阶段**: Phase 10 完成，全部 P1 功能开发完毕
+- **当前角色**: spec-coder
 - **阻塞状态**: 无
 
 ## 阶段进度
 
 | 阶段 | 状态 | 交付物 | 完成时间 |
 |------|------|--------|----------|
-| Phase 1 | ✅ 完成 | docs/REQUIREMENT.md | 2026-04-02 |
-| Phase 2 | ✅ 完成 | docs/DESIGN.md | 2026-04-02 |
-| Phase 3 | ✅ 完成 | docs/TODO.md | 2026-04-02 |
-| Phase 4 | ⏳ 待开始 | src/ 代码 | - |
+| Phase 1 (需求) | ✅ 完成 | docs/REQUIREMENT.md | 2026-04-02 |
+| Phase 2 (设计) | ✅ 完成 | docs/DESIGN.md | 2026-04-02 |
+| Phase 3 (任务) | ✅ 完成 | docs/TODO.md | 2026-04-02 |
+| Phase 4 (编码) | 🔄 进行中 | src/ | 2026-04-02 |
+
+### 编码进度
+
+| 开发阶段 | 状态 | 完成任务 |
+|---------|------|---------|
+| Phase 0: Spike | ⏭️ 跳过 | 直接构建，部署时验证 |
+| Phase 1: 脚手架 | ✅ 完成 | T101-T110 |
+| Phase 2: 类型+基础库 | ✅ 完成 | T201-T205 |
+| Phase 3: 认证系统 | ✅ 完成 | T301-T326 |
+| Phase 4: App Shell | ✅ 完成 | T401-T403 |
+| Phase 5: 知识点 | ✅ 完成 | T501-T523 |
+| Phase 6: SM-2 复习 | ✅ 完成 | T601-T624 |
+| Phase 7: AI 出题 | ✅ 完成 | T701-T741 |
+| Phase 8: PWA+部署 | ✅ 完成 | Service Worker + edgeone.json + KV 改造 |
+| Phase 9: AI 对话+Agent | ✅ 完成 | Agent 五层记忆完整实现 + Chat API + Chat UI + Bootstrap 引导 |
+| Phase 10: 学习统计+知识回溯 | ✅ 完成 | 统计 API + 统计页面 + 复习回溯 API + 时间线 UI |
 
 ## 关键决策记录
 
@@ -31,6 +47,8 @@
 | 2026-04-02 | KV 策略：2 命名空间 + Key 前缀分区 + 聚合文档 | KV 无范围查询，聚合减少 IO |
 | 2026-04-02 | Agent 记忆：CoPaw 五层架构适配 KV | SOUL/PROFILE/MEMORY/EPISODIC/WORKING，无向量搜索用关键词匹配 |
 | 2026-04-02 | 源码目录：`src/` 隔离 + Feature Module 垂直切分 | 运维友好（独立排查）+ 开发友好（模块解耦、Barrel Export） |
+| 2026-04-02 | KV 优先级链：EdgeOne KV → 本地文件 → 内存 | 生产用 KV，开发用 `~/.med-recallix/`，数据不丢失 |
+| 2026-04-02 | 敏感配置存 KV 而非 .env | 全栈代码 .env 可能暴露到客户端 |
 
 ## 任务概览
 
@@ -52,3 +70,10 @@
 | 2026-04-02 | Phase 3 | 完成任务清单（90 个原子任务） |
 | 2026-04-02 | 文档 | 按 GitHub 开源规范完善项目文档体系 |
 | 2026-04-02 | 架构 | 重构源码目录为 `src/{app,modules,shared}` Feature Module 体系 |
+| 2026-04-02 | 编码 | Phase 0-4 完成：脚手架 + 类型 + KV + 认证 + App Shell |
+| 2026-04-02 | 编码 | Phase 5-7 完成：知识点 CRUD + SM-2 复习 + AI 出题 + 设置 |
+| 2026-04-02 | 编码 | Phase 8 完成：PWA Service Worker + edgeone.json + KV 存储策略改造（本地文件持久化） |
+| 2026-04-03 | 编码 | Phase 9 完成：Agent 五层记忆架构 + Chat API 流式对话 + Chat UI 会话管理 + 底部导航对话Tab |
+| 2026-04-03 | 测试 | Phase 9 自动化验证 27/27 通过 |
+| 2026-04-03 | 编码 | Phase 9 记忆系统完善：上下文窗口(20条) + AI自主记忆提取 + 对话摘要压缩 + Bootstrap引导 + Episode追踪 |
+| 2026-04-03 | 编码 | Phase 10 完成：学习统计 API + 统计页面(7日图表/掌握进度/连续天数) + 复习回溯 API + 时间线 UI |

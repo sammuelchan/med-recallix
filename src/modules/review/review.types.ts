@@ -1,3 +1,10 @@
+export interface ReviewLog {
+  date: string;
+  grade: ReviewGrade;
+  interval: number;
+  efactor: number;
+}
+
 export interface Card {
   id: string;
   knowledgePointId: string;
@@ -7,6 +14,7 @@ export interface Card {
   efactor: number;
   dueDate: string;
   lastReviewDate?: string;
+  reviewHistory?: ReviewLog[];
 }
 
 export interface Deck {

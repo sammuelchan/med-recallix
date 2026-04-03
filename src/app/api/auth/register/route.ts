@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { register, RegisterSchema, buildCookieHeader } from "@/modules/auth";
+import { register, LoginSchema, buildCookieHeader } from "@/modules/auth";
 import { AppError } from "@/shared/lib/errors";
-
-export const runtime = "edge";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { username, password } = RegisterSchema.parse(body);
+    const { username, password } = LoginSchema.parse(body);
 
     const { user, token } = await register(username, password);
 

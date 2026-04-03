@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Med-Recallix Phase 9 手工验证指引</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-card: #161b22;
+      --bg-card-hover: #1c2333;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-dim: #1f6feb;
+      --green: #3fb950;
+      --green-dim: #238636;
+      --red: #f85149;
+      --gold: #d29922;
+      --purple: #bc8cff;
+      --border: #30363d;
+      --radius: 12px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 2rem 1rem;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.3rem; margin: 2rem 0 0.8rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+    h3 { font-size: 1.1rem; margin: 1.2rem 0 0.5rem; color: var(--purple); }
+    p { margin-bottom: 0.8rem; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { font-family: var(--mono); background: var(--bg-card); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+    pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; overflow-x: auto; margin: 0.8rem 0; }
+    pre code { background: none; padding: 0; }
+    ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+    li { margin: 0.3rem 0; }
+
+    .important-always-visible {
+      background: linear-gradient(135deg, var(--accent-dim) 0%, #1a1e2e 100%);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 1.2rem 1.5rem;
+      margin: 1.5rem 0;
+    }
+    .important-always-visible h2 { color: var(--text); border: none; margin: 0 0 0.5rem; font-size: 1.1rem; }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.2rem 1.5rem;
+      margin: 1rem 0;
+    }
+    .card.priority {
+      border-color: var(--green-dim);
+      background: linear-gradient(135deg, #0d1117 0%, #0d2818 100%);
+    }
+    .card.warning {
+      border-color: var(--gold);
+      background: linear-gradient(135deg, #0d1117 0%, #2d1f05 100%);
+    }
+
+    .step-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      margin: 0.8rem 0;
+      transition: border-color 0.2s;
+    }
+    .step-card:hover { border-color: var(--accent); }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-right: 0.6rem;
+      flex-shrink: 0;
+    }
+    .step-header { display: flex; align-items: center; margin-bottom: 0.5rem; }
+    .step-header strong { font-size: 1rem; }
+
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      padding: 0.4rem 0;
+    }
+    .check-item input[type="checkbox"] {
+      margin-top: 5px;
+      accent-color: var(--green);
+      width: 16px; height: 16px;
+      flex-shrink: 0;
+    }
+
+    .tc-badge {
+      display: inline-block;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1px 8px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      margin-left: 6px;
+    }
+
+    details {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin: 0.8rem 0;
+    }
+    details summary {
+      padding: 0.8rem 1.2rem;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    details summary:hover { color: var(--text); }
+    details[open] summary { border-bottom: 1px solid var(--border); }
+    .collapsible-content { padding: 1rem 1.2rem; }
+
+    .two-column-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1rem 0;
+    }
+    @media (max-width: 640px) {
+      .two-column-layout { grid-template-columns: 1fr; }
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.8rem 0;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.8rem;
+      text-align: left;
+    }
+    th { background: var(--bg-card); color: var(--text-muted); font-weight: 600; }
+
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin: 2px; }
+    .tag-p0 { background: var(--red); color: white; }
+    .tag-p1 { background: var(--gold); color: #111; }
+    .tag-manual { background: var(--purple); color: white; }
+    .tag-auto { background: var(--green-dim); color: white; }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      margin: 0.5rem 0;
+      overflow: hidden;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+    .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+
+<h1>Med-Recallix Phase 9 手工验证指引</h1>
+<p class="subtitle">AI 对话 + Agent 记忆系统 — 配置 API Key 与 User Journey 验证</p>
+
+<div class="important-always-visible">
+  <h2>验证目标</h2>
+  <p><strong>配置有效 API Key，然后走完 4 条 User Journey 来覆盖 Phase 9 的全部手工验证用例。</strong></p>
+  <ul>
+    <li><strong>自动化验证</strong>：27/27 已通过（API CRUD、KV 持久化、代码结构）</li>
+    <li><strong>手工验证</strong>：5 条需要有效 API Key + UI 交互</li>
+  </ul>
+</div>
+
+<h2>Step 0: 配置 API Key</h2>
+
+<p>Phase 9 的 AI 对话功能需要有效的 API Key。以下 3 种方式任选其一：</p>
+
+<div class="two-column-layout">
+  <div class="card">
+    <h3>方式 A: 设置页面（推荐）</h3>
+    <ol>
+      <li>打开 <code>http://localhost:3000</code></li>
+      <li>注册/登录后进入 <strong>设置</strong> 页</li>
+      <li>填入 API Key、Base URL、Model</li>
+      <li>点击保存</li>
+    </ol>
+    <p style="color:var(--text-muted); font-size:0.85rem;">数据自动写入 <code>~/.med-recallix/kv/med_config/ai_config.json</code></p>
+  </div>
+  <div class="card">
+    <h3>方式 B: 手动写文件</h3>
+    <pre><code># Windows PowerShell
+$dir = "$env:USERPROFILE\.med-recallix\kv\med_config"
+New-Item -ItemType Directory -Force -Path $dir
+
+# 写入 AI 配置
+@'
+{
+  "apiKey": "sk-你的真实Key",
+  "baseURL": "https://api.kimi.com/coding/v1",
+  "model": "kimi-for-coding"
+}
+'@ | Out-File -Encoding utf8 "$dir\ai_config.json"</code></pre>
+  </div>
+</div>
+
+<details>
+  <summary>方式 C: 通过 .env.local 环境变量</summary>
+  <div class="collapsible-content">
+    <pre><code># .env.local
+KIMI_API_KEY=sk-你的真实Key
+AI_BASE_URL=https://api.kimi.com/coding/v1
+AI_MODEL=kimi-for-coding
+JWT_SECRET=local-dev-secret-change-in-production</code></pre>
+    <p>修改后需重启 <code>pnpm dev</code>。</p>
+  </div>
+</details>
+
+<div class="card warning">
+  <h3>Kimi API Key 获取</h3>
+  <p>前往 <a href="https://platform.moonshot.cn/console/api-keys" target="_blank">Moonshot AI 控制台</a> 创建 API Key。<code>kimi-for-coding</code> 模型面向开发者免费。</p>
+  <p>如果使用其他 OpenAI 兼容模型，只需修改 <code>baseURL</code> 和 <code>model</code>。</p>
+</div>
+
+<h2>User Journey 验证</h2>
+
+<p>以下 4 条 Journey 覆盖所有待手工验证的测试用例。请在开发服务器 (<code>pnpm dev</code>) 运行后执行。</p>
+
+<!-- ==================== Journey 1 ==================== -->
+<h3>Journey 1: 首次对话 — 认识瑞卡利斯</h3>
+<p>覆盖用例：<span class="tc-badge">TC-CHAT-001</span><span class="tc-badge">TC-CHAT-002</span><span class="tc-badge">TC-CHAT-020</span><span class="tc-badge">TC-CHAT-050</span></p>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">1</span><strong>点击底部导航的「对话」Tab</strong></div>
+  <div class="check-item"><input type="checkbox"><span>底部出现「对话」Tab（<code>MessageSquare</code> 图标 + "对话"文字）</span></div>
+  <div class="check-item"><input type="checkbox"><span>点击后跳转到 <code>/chat</code> 页面</span></div>
+  <div class="check-item"><input type="checkbox"><span>Tab 激活态正确高亮（文字变为主色）</span></div>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">2</span><strong>查看空白对话页面</strong></div>
+  <div class="check-item"><input type="checkbox"><span>显示 🧠 欢迎图标</span></div>
+  <div class="check-item"><input type="checkbox"><span>提示文字"你好，主人！我是瑞卡利斯"</span></div>
+  <div class="check-item"><input type="checkbox"><span>底部有输入框和发送按钮</span></div>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">3</span><strong>发送：「你是谁？」</strong></div>
+  <div class="check-item"><input type="checkbox"><span>用户消息立即出现在右侧（蓝色气泡）</span></div>
+  <div class="check-item"><input type="checkbox"><span>AI 回复出现在左侧（灰色气泡 + 🧠 头像）</span></div>
+  <div class="check-item"><input type="checkbox"><span><strong>流式输出</strong>：文字逐字/逐句出现，有 ▍ 光标闪烁</span></div>
+  <div class="check-item"><input type="checkbox"><span>输出完成后 ▍ 光标消失</span></div>
+  <div class="check-item"><input type="checkbox"><span>AI 自我介绍为"瑞卡利斯"或"医考学习伙伴"</span></div>
+  <div class="check-item"><input type="checkbox"><span>AI 称你为"主人"</span></div>
+  <div class="check-item"><input type="checkbox"><span>语气温暖、专业</span></div>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">4</span><strong>发送一个医学问题：「肺栓塞的三联征是什么？」</strong></div>
+  <div class="check-item"><input type="checkbox"><span>AI 正确回答（呼吸困难、胸痛、咯血）</span></div>
+  <div class="check-item"><input type="checkbox"><span>关键术语 <strong>加粗</strong> 显示</span></div>
+  <div class="check-item"><input type="checkbox"><span>回答使用分点/条目格式，便于手机阅读</span></div>
+</div>
+
+<!-- ==================== Journey 2 ==================== -->
+<h3>Journey 2: 多轮上下文 — 深入学习</h3>
+<p>覆盖用例：<span class="tc-badge">TC-CHAT-003</span></p>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">1</span><strong>在同一对话中继续发送：「帮我总结一下心力衰竭」</strong></div>
+  <div class="check-item"><input type="checkbox"><span>AI 流式回复心力衰竭的知识点总结</span></div>
+  <div class="check-item"><input type="checkbox"><span>回答有条理（分点/表格）</span></div>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">2</span><strong>发送：「刚才说的第二点能详细展开吗？」</strong></div>
+  <div class="check-item"><input type="checkbox"><span><strong>上下文保持</strong>：AI 理解"第二点"指代上一轮回复的内容</span></div>
+  <div class="check-item"><input type="checkbox"><span>回答与上文逻辑一致，针对性展开</span></div>
+  <div class="check-item"><input type="checkbox"><span>消息列表自动滚动到最新消息</span></div>
+</div>
+
+<!-- ==================== Journey 3 ==================== -->
+<h3>Journey 3: 会话管理 — 新建/切换/删除</h3>
+<p>覆盖用例：<span class="tc-badge">TC-CHAT-010</span><span class="tc-badge">TC-CHAT-011</span><span class="tc-badge">TC-CHAT-012</span></p>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">1</span><strong>点击顶部右侧的侧边栏按钮（⊞ 图标）</strong></div>
+  <div class="check-item"><input type="checkbox"><span>侧边栏从左侧滑出</span></div>
+  <div class="check-item"><input type="checkbox"><span>显示已有对话，标题不是"新对话"而是第一条消息的前 20 字</span></div>
+  <div class="check-item"><input type="checkbox"><span>显示时间信息</span></div>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">2</span><strong>点击「新建对话」</strong></div>
+  <div class="check-item"><input type="checkbox"><span>页面切换到空白对话</span></div>
+  <div class="check-item"><input type="checkbox"><span>发送一条消息后，侧边栏中出现新会话</span></div>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">3</span><strong>点击侧边栏中的第一个（旧的）对话</strong></div>
+  <div class="check-item"><input type="checkbox"><span>页面切换回之前的对话</span></div>
+  <div class="check-item"><input type="checkbox"><span>显示完整的消息历史（包括之前的所有消息）</span></div>
+  <div class="check-item"><input type="checkbox"><span>可以继续发送新消息</span></div>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">4</span><strong>将鼠标悬停在某个会话上，点击删除按钮（🗑️）</strong></div>
+  <div class="check-item"><input type="checkbox"><span>对话从列表中消失</span></div>
+  <div class="check-item"><input type="checkbox"><span>页面切换到新的空白对话</span></div>
+</div>
+
+<!-- ==================== Journey 4 ==================== -->
+<h3>Journey 4: 全流程闭环 — 知识点 → 复习 → 对话</h3>
+<p>覆盖用例：<span class="tc-badge">TC-CHAT-021</span>（部分覆盖，需有逾期数据）</p>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">1</span><strong>先创建知识点并完成复习</strong></div>
+  <p style="color:var(--text-muted);">如果已有知识点可跳过此步。</p>
+  <ol>
+    <li>进入「知识点」→ 新建 → 标题"高血压分级" → 内容填写 → 保存</li>
+    <li>进入「复习」→ 对卡片评分 → 完成复习</li>
+  </ol>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">2</span><strong>进入「对话」页面，发送：「我今天学了什么？」</strong></div>
+  <div class="check-item"><input type="checkbox"><span>AI 回复（即使没有复习提醒，也能正常对话）</span></div>
+  <div class="check-item"><input type="checkbox"><span>语气温暖、鼓励式</span></div>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">3</span><strong>发送：「帮我出一道关于高血压的选择题」</strong></div>
+  <div class="check-item"><input type="checkbox"><span>AI 在对话中直接出题（非调用出题 API，而是对话式出题）</span></div>
+  <div class="check-item"><input type="checkbox"><span>题目格式合理（A/B/C/D 选项）</span></div>
+</div>
+
+<h2>验证结果记录</h2>
+
+<table>
+  <thead>
+    <tr><th>用例 ID</th><th>用例名称</th><th>对应 Journey</th><th>结果</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>TC-CHAT-001</code></td><td>发送消息并收到 AI 回复</td><td>Journey 1, Step 3-4</td><td>☐ 通过 / ☐ 失败</td></tr>
+    <tr><td><code>TC-CHAT-002</code></td><td>流式输出效果（打字机）</td><td>Journey 1, Step 3</td><td>☐ 通过 / ☐ 失败</td></tr>
+    <tr><td><code>TC-CHAT-003</code></td><td>多轮对话保持上下文</td><td>Journey 2</td><td>☐ 通过 / ☐ 失败</td></tr>
+    <tr><td><code>TC-CHAT-011</code></td><td>切换历史对话</td><td>Journey 3, Step 3</td><td>☐ 通过 / ☐ 失败</td></tr>
+    <tr><td><code>TC-CHAT-020</code></td><td>AI 以预设人格回答</td><td>Journey 1, Step 3</td><td>☐ 通过 / ☐ 失败</td></tr>
+    <tr><td><code>TC-CHAT-021</code></td><td>AI 主动提醒复习</td><td>Journey 4, Step 2</td><td>☐ 通过 / ☐ 失败 / ☐ 部分</td></tr>
+    <tr><td><code>TC-CHAT-050</code></td><td>底部导航对话 Tab</td><td>Journey 1, Step 1</td><td>☐ 通过 / ☐ 失败</td></tr>
+  </tbody>
+</table>
+
+<h2>EdgeOne 部署指引</h2>
+
+<p>本地验证通过后，按以下步骤推送到 EdgeOne 生产环境。</p>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">1</span><strong>推送代码到 Git 仓库</strong></div>
+  <pre><code>cd c:\workspace\my-workspace\med-recallix
+git add -A
+git commit -m "feat: Phase 9 - AI 对话 + Agent 记忆系统"
+git remote add origin https://github.com/你的用户名/med-recallix.git
+git push -u origin main</code></pre>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">2</span><strong>在 EdgeOne Pages 创建项目</strong></div>
+  <ol>
+    <li>登录 <a href="https://edgeone.ai/pages" target="_blank">EdgeOne Pages 控制台</a></li>
+    <li>点击「创建项目」→「导入 Git 仓库」</li>
+    <li>授权 GitHub，选择 <code>med-recallix</code></li>
+    <li>框架选 <strong>Next.js</strong>，构建命令 <code>pnpm build</code>，输出 <code>.next</code></li>
+    <li>点击部署</li>
+  </ol>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">3</span><strong>配置 KV 存储</strong></div>
+  <ol>
+    <li>顶部导航 → KV 存储 → 创建两个命名空间</li>
+    <li>项目详情 → KV 存储 → 绑定：
+      <ul>
+        <li>第一个命名空间 → 变量名 <code>MED_CONFIG</code></li>
+        <li>第二个命名空间 → 变量名 <code>MED_DATA</code></li>
+      </ul>
+    </li>
+    <li>进入 <code>MED_CONFIG</code> 命名空间 → 新建记录：</li>
+  </ol>
+  <table>
+    <thead><tr><th>Key</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>ai_config</code></td>
+        <td><code>{"apiKey":"sk-你的Key","baseURL":"https://api.kimi.com/coding/v1","model":"kimi-for-coding"}</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="color:var(--text-muted); font-size:0.85rem;"><code>JWT_SECRET</code> 已内置在 <code>.env.example</code> 中，构建时自动 copy 到 <code>.env</code>，无需额外配置。</p>
+</div>
+
+<div class="step-card">
+  <div class="step-header"><span class="step-num">4</span><strong>重新部署并验证</strong></div>
+  <p>绑定 KV 后点击「重新部署」。构建时会自动执行 <code>cp .env.example .env</code>，<code>JWT_SECRET</code> 从 <code>.env.example</code> 注入。部署完成后用分配的域名重复上述 4 条 Journey。</p>
+</div>
+
+<div class="card priority">
+  <h3>完成后的下一步</h3>
+  <ol>
+    <li><strong>记录结果</strong>：在上方表格中勾选通过/失败，截图留存</li>
+    <li><strong>报告问题</strong>：如有失败用例，描述具体现象（截图/控制台报错）以便定位修复</li>
+    <li><strong>继续开发</strong>：全部通过后可继续 Phase 10（学习统计 + 知识回溯）</li>
+  </ol>
+</div>
+
+</body>
+</html>

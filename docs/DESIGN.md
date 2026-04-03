@@ -437,8 +437,8 @@ export async function POST(req: NextRequest) {
 
 | 命名空间 | 绑定变量名 | 用途 | 预估大小 |
 |----------|-----------|------|---------|
-| `med_config` | `med_config` | 系统配置（AI Key、模型端点） | < 1KB |
-| `med_data` | `med_data` | 全部业务数据（用户、知识点、卡片） | < 900MB |
+| `med_config` | `MED_CONFIG` | 系统配置（AI Key、JWT Secret） | < 10KB |
+| `med_data` | `MED_DATA` | 全部业务数据（用户、知识点、卡片） | < 900MB |
 
 **设计原则**：仅用 2 个命名空间，预留 8 个给未来扩展（如对话历史、统计等）。
 
@@ -446,15 +446,17 @@ export async function POST(req: NextRequest) {
 
 采用 **前缀分区 + 聚合文档** 模式。KV 无范围查询，所以将同一用户的同类数据聚合到一个 Key 中，一次 GET 读取后在内存过滤。
 
-#### med_config 命名空间
+#### med_config 命名空间（MED_CONFIG）
 
 | Key | Value 类型 | 说明 |
 |-----|-----------|------|
-| `ai_api_key` | string | AI API Key（加密存储） |
-| `ai_base_url` | string | AI 端点 URL，默认 `https://api.kimi.com/coding/v1` |
-| `ai_model` | string | 模型名，默认 `kimi-for-coding` |
+| `ai_config` | JSON (`AIConfig`) | `{ apiKey, baseURL, model }` — AI 模型配置 |
+| `app_secrets` | JSON (`AppSecrets`) | `{ jwtSecret }` — JWT 签名密钥 |
+| `invite_code` | string | 注册邀请码（可选） |
 
-#### med_data 命名空间
+**配置优先级链**：`EdgeOne KV` → `环境变量 (.env.local)` → `本地文件 (~/.med-recallix/kv/)` → `内置默认值`
+
+#### med_data 命名空间（MED_DATA）
 
 | Key 模式 | Value 类型 | 说明 | 预估单条大小 |
 |----------|-----------|------|-------------|

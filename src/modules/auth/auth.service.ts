@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { kvGet, kvPut, kvKeys } from "@/shared/infrastructure/kv";
+import { getJwtSecret } from "@/shared/infrastructure/config";
 import { generateId } from "@/shared/lib/utils";
 import { ConflictError, UnauthorizedError } from "@/shared/lib/errors";
 import {
@@ -10,11 +11,6 @@ import {
   HASH_LENGTH,
 } from "./auth.constants";
 import type { AuthUser, StoredUser, JWTPayload } from "./auth.types";
-
-function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET || "dev-secret-change-in-production";
-  return new TextEncoder().encode(secret);
-}
 
 export async function hashPassword(
   password: string,
@@ -62,16 +58,18 @@ export async function verifyPassword(
 }
 
 export async function signJWT(user: AuthUser): Promise<string> {
+  const secret = await getJwtSecret();
   return new SignJWT({ username: user.username } as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
     .setExpirationTime(JWT_EXPIRY)
-    .sign(getJwtSecret());
+    .sign(secret);
 }
 
 export async function verifyJWT(token: string): Promise<JWTPayload> {
-  const { payload } = await jwtVerify(token, getJwtSecret());
+  const secret = await getJwtSecret();
+  const { payload } = await jwtVerify(token, secret);
   return payload as unknown as JWTPayload;
 }
 

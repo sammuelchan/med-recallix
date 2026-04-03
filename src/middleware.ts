@@ -3,30 +3,34 @@ import { jwtVerify } from "jose";
 
 const AUTH_COOKIE = "med-recallix-token";
 
-const PROTECTED_PATHS = ["/dashboard", "/review", "/knowledge", "/quiz", "/chat", "/settings"];
-const AUTH_PATHS = ["/login", "/register"];
+const PROTECTED_PAGES = ["/dashboard", "/review", "/knowledge", "/quiz", "/chat", "/settings"];
+const AUTH_PAGES = ["/login", "/register"];
+const PUBLIC_API = ["/api/auth/login", "/api/auth/register"];
 
-function getJwtSecret(): Uint8Array {
-  return new TextEncoder().encode(
-    process.env.JWT_SECRET || "dev-secret-change-in-production",
-  );
+function getJwtSecretSync(): Uint8Array {
+  const raw = process.env.JWT_SECRET || "dev-secret-change-in-production";
+  return new TextEncoder().encode(raw);
 }
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get(AUTH_COOKIE)?.value;
 
-  const isProtected = PROTECTED_PATHS.some((p) => pathname.startsWith(p));
-  const isAuthPage = AUTH_PATHS.some((p) => pathname.startsWith(p));
+  const isApi = pathname.startsWith("/api/");
+  const isProtectedPage = PROTECTED_PAGES.some((p) => pathname.startsWith(p));
+  const isAuthPage = AUTH_PAGES.some((p) => pathname.startsWith(p));
+  const isPublicApi = PUBLIC_API.some((p) => pathname === p);
 
-  if (!isProtected && !isAuthPage) return NextResponse.next();
+  if (!isApi && !isProtectedPage && !isAuthPage) return NextResponse.next();
+  if (isPublicApi) return NextResponse.next();
 
   let isAuthenticated = false;
   let userId: string | undefined;
 
   if (token) {
     try {
-      const { payload } = await jwtVerify(token, getJwtSecret());
+      const secret = getJwtSecretSync();
+      const { payload } = await jwtVerify(token, secret);
       isAuthenticated = true;
       userId = payload.sub;
     } catch {
@@ -34,7 +38,14 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  if (isProtected && !isAuthenticated) {
+  if (isApi && !isAuthenticated) {
+    return NextResponse.json(
+      { success: false, error: "未登录" },
+      { status: 401 },
+    );
+  }
+
+  if (isProtectedPage && !isAuthenticated) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
@@ -55,6 +66,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    "/api/:path*",
     "/dashboard/:path*",
     "/review/:path*",
     "/knowledge/:path*",

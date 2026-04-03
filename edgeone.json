@@ -1,0 +1,8 @@
+{
+  "$schema": "https://pages.edgeone.ai/schema/edgeone.json",
+  "name": "med-recallix",
+  "build": {
+    "command": "cp .env.example .env && pnpm install && pnpm build",
+    "output": ".next"
+  }
+}

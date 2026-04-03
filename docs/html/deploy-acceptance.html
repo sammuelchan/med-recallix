@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Med-Recallix 部署验收指南</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-hover: #242836;
+  --text: #e4e4e7;
+  --text-muted: #9ca3af;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --success: #22c55e;
+  --warning: #eab308;
+  --danger: #ef4444;
+  --border: #2d3348;
+  --code-bg: #1e2130;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.3rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1.1rem; margin: 1.5rem 0 0.75rem; }
+p { margin: 0.5rem 0; }
+a { color: var(--accent-light); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { color: var(--text); }
+code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+pre { background: var(--code-bg); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+pre code { background: none; padding: 0; }
+ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+li { margin: 0.3rem 0; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.92em; }
+th, td { padding: 0.6rem 0.8rem; border: 1px solid var(--border); text-align: left; }
+th { background: var(--bg-card); font-weight: 600; }
+.subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; }
+.important-always-visible {
+  background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.08));
+  border-left: 4px solid var(--accent);
+  padding: 1.2rem 1.5rem;
+  border-radius: 0 8px 8px 0;
+  margin: 1.5rem 0;
+}
+.card { background: var(--bg-card); border-radius: 12px; padding: 1.2rem 1.5rem; margin: 1rem 0; border: 1px solid var(--border); }
+.card.priority { border-left: 4px solid var(--success); }
+.card.warning { border-left: 4px solid var(--warning); }
+.card.danger { border-left: 4px solid var(--danger); }
+.step-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: white; font-weight: 700; font-size: 0.85rem;
+  margin-right: 0.5rem; flex-shrink: 0;
+}
+.step { display: flex; align-items: flex-start; margin: 1rem 0; }
+.step-content { flex: 1; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 0.78rem; font-weight: 600;
+}
+.badge-pass { background: rgba(34,197,94,0.15); color: var(--success); }
+.badge-fail { background: rgba(239,68,68,0.15); color: var(--danger); }
+.badge-skip { background: rgba(156,163,175,0.15); color: var(--text-muted); }
+details.collapsible { margin: 0.75rem 0; }
+details.collapsible summary {
+  cursor: pointer; font-weight: 600; padding: 0.6rem 0;
+  color: var(--accent-light); list-style: none;
+}
+details.collapsible summary::before { content: '▶ '; font-size: 0.8em; }
+details.collapsible[open] summary::before { content: '▼ '; }
+.collapsible-content { padding: 0.5rem 0 0.5rem 1rem; border-left: 2px solid var(--border); }
+.checklist { list-style: none; padding-left: 0; }
+.checklist li { padding: 0.4rem 0; padding-left: 1.8rem; position: relative; }
+.checklist li::before { content: '☐'; position: absolute; left: 0; color: var(--text-muted); font-size: 1.1em; }
+.diagram-container { margin: 1rem 0; background: var(--bg-card); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+.journey-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-light); margin-bottom: 0.3rem; }
+hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Med-Recallix 部署验收指南</h1>
+<p class="subtitle">从 Git Push 到生产验收的完整流程 — 预计耗时 30 分钟</p>
+
+<div class="important-always-visible">
+  <h2 style="border:none; margin:0 0 0.5rem; padding:0; font-size:1.1rem;">核心要点</h2>
+  <ul>
+    <li><strong>部署方式</strong>：Git Push → EdgeOne 自动构建部署（无需手动上传）</li>
+    <li><strong>必须配置</strong>：KV 存储绑定 + AI API Key 写入 KV</li>
+    <li><strong>验收标准</strong>：7 条 User Journey 全部通过即为验收合格</li>
+  </ul>
+</div>
+
+<!-- =============== PART 1: DEPLOY =============== -->
+<h2>第一部分：部署到 EdgeOne</h2>
+
+<div class="diagram-container">
+  <div class="mermaid">
+flowchart LR
+    A[Git Push] --> B[EdgeOne 构建]
+    B --> C[静态资源 CDN]
+    B --> D[Edge Functions]
+    D --> E[KV 存储]
+    D --> F[AI API]
+    C --> G[用户访问]
+    D --> G
+  </div>
+</div>
+
+<h3>Step 1：推送代码到 GitHub</h3>
+
+<pre><code>git add -A
+git commit -m "feat: complete MVP + P1 features"
+git push origin main</code></pre>
+
+<div class="card warning">
+  <strong>⚠️ 确认清单</strong>
+  <ul class="checklist">
+    <li><code>.env.example</code> 中有 <code>JWT_SECRET</code> 值</li>
+    <li><code>edgeone.json</code> 存在且构建命令为 <code>cp .env.example .env && pnpm install && pnpm build</code></li>
+    <li><code>.gitignore</code> 包含 <code>.env.local</code> 和 <code>.next/</code></li>
+  </ul>
+</div>
+
+<h3>Step 2：创建 EdgeOne Pages 项目</h3>
+
+<div class="step">
+  <span class="step-number">1</span>
+  <div class="step-content">
+    登录 <a href="https://edgeone.ai/pages" target="_blank">EdgeOne Pages 控制台</a> → 点击 <strong>创建项目</strong>
+  </div>
+</div>
+<div class="step">
+  <span class="step-number">2</span>
+  <div class="step-content">
+    选择 <strong>导入 Git 仓库</strong> → 授权 GitHub → 选择 <code>med-recallix</code>
+  </div>
+</div>
+<div class="step">
+  <span class="step-number">3</span>
+  <div class="step-content">
+    构建设置自动读取 <code>edgeone.json</code>，确认后点击 <strong>部署</strong>
+    <table>
+      <tr><th>设置</th><th>值</th></tr>
+      <tr><td>框架</td><td>Next.js</td></tr>
+      <tr><td>构建命令</td><td><code>cp .env.example .env && pnpm install && pnpm build</code></td></tr>
+      <tr><td>输出目录</td><td><code>.next</code></td></tr>
+    </table>
+  </div>
+</div>
+<div class="step">
+  <span class="step-number">4</span>
+  <div class="step-content">
+    等待构建完成（约 2-5 分钟），获取分配域名如 <code>med-recallix-xxx.edgeone.app</code>
+  </div>
+</div>
+
+<h3>Step 3：配置 KV 存储</h3>
+
+<div class="card">
+  <p class="journey-tag">关键步骤</p>
+  <p>没有 KV 配置，所有 API 将返回 500 错误。</p>
+</div>
+
+<div class="step">
+  <span class="step-number">1</span>
+  <div class="step-content">
+    <strong>开通 KV 服务</strong>：控制台顶部 → KV 存储 → 立即申请
+  </div>
+</div>
+<div class="step">
+  <span class="step-number">2</span>
+  <div class="step-content">
+    <strong>创建 2 个命名空间</strong>：
+    <table>
+      <tr><th>命名空间名称</th><th>用途</th></tr>
+      <tr><td><code>med_config</code></td><td>系统配置</td></tr>
+      <tr><td><code>med_data</code></td><td>业务数据</td></tr>
+    </table>
+  </div>
+</div>
+<div class="step">
+  <span class="step-number">3</span>
+  <div class="step-content">
+    <strong>绑定到项目</strong>：项目详情 → KV 存储 → 绑定命名空间
+    <table>
+      <tr><th>命名空间</th><th>变量名（必须一致）</th></tr>
+      <tr><td>med_config</td><td><code>MED_CONFIG</code></td></tr>
+      <tr><td>med_data</td><td><code>MED_DATA</code></td></tr>
+    </table>
+  </div>
+</div>
+<div class="step">
+  <span class="step-number">4</span>
+  <div class="step-content">
+    <strong>写入 AI 配置</strong>：进入 <code>med_config</code> 命名空间 → 记录管理 → 新建记录
+    <pre><code>Key:   ai_config
+Value: {"apiKey":"sk-你的API密钥","baseURL":"https://api.moonshot.cn/v1","model":"moonshot-v1-auto"}</code></pre>
+    <p style="color: var(--text-muted); font-size: 0.88em;">
+      支持 Moonshot / DeepSeek / OpenAI 等任何 OpenAI 兼容 API
+    </p>
+  </div>
+</div>
+<div class="step">
+  <span class="step-number">5</span>
+  <div class="step-content">
+    <strong>重新部署</strong>：KV 绑定后必须重新部署才能生效。进入项目 → 部署 → 重新部署
+  </div>
+</div>
+
+<div class="card warning">
+  <strong>⚠️ 常见陷阱</strong>
+  <ul>
+    <li>变量名 <code>MED_CONFIG</code> 和 <code>MED_DATA</code> 大小写敏感，写错会导致 500 错误</li>
+    <li>KV 绑定后不重新部署 = 绑定不生效</li>
+    <li>AI API Key 不要放在 <code>.env</code> 文件中，必须通过 KV 或设置页面配置</li>
+  </ul>
+</div>
+
+<!-- =============== PART 2: ACCEPTANCE =============== -->
+<h2>第二部分：验收测试</h2>
+
+<p>以下 7 条 User Journey 覆盖全部 MVP + P1 功能。逐条执行，全部通过即验收合格。</p>
+
+<hr>
+
+<h3>Journey 1：注册与登录</h3>
+<p class="journey-tag">认证系统</p>
+
+<ul class="checklist">
+  <li>访问部署域名，看到登录页面</li>
+  <li>点击注册，输入用户名 <code>test01</code>、密码 <code>Test1234</code>，注册成功</li>
+  <li>自动跳转到首页（Dashboard）</li>
+  <li>刷新页面，仍保持登录状态（JWT 有效）</li>
+  <li>点击设置 → 退出登录 → 回到登录页</li>
+  <li>用刚注册的账号重新登录成功</li>
+</ul>
+
+<details class="collapsible">
+  <summary>失败排查</summary>
+  <div class="collapsible-content">
+    <table>
+      <tr><th>现象</th><th>原因</th><th>修复</th></tr>
+      <tr><td>注册 500 错误</td><td>KV MED_DATA 未绑定</td><td>检查 KV 绑定变量名</td></tr>
+      <tr><td>登录后刷新变登录页</td><td>JWT_SECRET 未注入</td><td>确认 .env.example 有值且构建命令含 cp</td></tr>
+    </table>
+  </div>
+</details>
+
+<hr>
+
+<h3>Journey 2：知识点管理</h3>
+<p class="journey-tag">知识点 CRUD</p>
+
+<ul class="checklist">
+  <li>底部导航 → 知识点 → 右上角 + 新建</li>
+  <li>填写标题「心力衰竭分类」，分类「内科/心血管」，内容随意，保存</li>
+  <li>列表中出现该知识点</li>
+  <li>点击进入详情，内容正确显示</li>
+  <li>点击编辑图标，修改标题 → 保存 → 标题更新</li>
+  <li>再新建 2 个知识点，列表显示 3 个</li>
+</ul>
+
+<hr>
+
+<h3>Journey 3：SM-2 复习</h3>
+<p class="journey-tag">间隔重复引擎</p>
+
+<ul class="checklist">
+  <li>知识点详情中看到「复习回溯」区域（应显示「尚未加入复习卡片」）</li>
+  <li>底部导航 → 复习 → 看到待复习卡片（新建的知识点自动生成卡片）</li>
+  <li>开始复习，对卡片评分（0-5），提交后卡片更新</li>
+  <li>返回首页，看到复习统计更新（待复习数/已完成数）</li>
+  <li>连续天数横幅出现</li>
+  <li>回到知识点详情 → 复习回溯时间线出现刚才的评分记录</li>
+</ul>
+
+<hr>
+
+<h3>Journey 4：AI 出题</h3>
+<p class="journey-tag">AI 集成</p>
+
+<ul class="checklist">
+  <li>确认设置页面中 API Key 已配置（或 KV 中已写入）</li>
+  <li>底部导航 → 复习页面 → 找到 AI 出题入口</li>
+  <li>选择知识点 → 生成题目 → AI 返回选择题</li>
+  <li>答题提交 → 显示正确答案和解析</li>
+</ul>
+
+<details class="collapsible">
+  <summary>AI 错误排查</summary>
+  <div class="collapsible-content">
+    <table>
+      <tr><th>提示</th><th>原因</th><th>修复</th></tr>
+      <tr><td>尚未配置 AI API Key</td><td>KV 没有 ai_config 或 apiKey 为空</td><td>在 KV med_config 或设置页面配置</td></tr>
+      <tr><td>AI 账户余额不足</td><td>Moonshot 账户欠费</td><td>充值或更换 API</td></tr>
+      <tr><td>模型不支持 Web 调用</td><td>误用了 kimi-for-coding</td><td>改为 moonshot-v1-auto</td></tr>
+    </table>
+  </div>
+</details>
+
+<hr>
+
+<h3>Journey 5：AI 对话 + Agent 记忆</h3>
+<p class="journey-tag">P1 核心功能</p>
+
+<ul class="checklist">
+  <li>底部导航 → 对话</li>
+  <li><strong>首次引导</strong>：如果是新用户，看到欢迎界面，发送「你好」</li>
+  <li>AI 以引导模式回复，收集学习档案（考试目标、强弱科目等）</li>
+  <li>配合 AI 完成档案收集，AI 输出 JSON 后自动保存</li>
+  <li>开始正常对话，问一个医学问题如「糖尿病分型的鉴别要点」</li>
+  <li>AI 流式回复，打字效果正常，称呼「主人」</li>
+  <li>左上角打开会话列表 → 看到对话记录</li>
+  <li>新建对话 → 新会话正常工作</li>
+  <li>切换回旧会话 → 历史消息正确加载</li>
+</ul>
+
+<hr>
+
+<h3>Journey 6：学习统计</h3>
+<p class="journey-tag">P1 数据可视化</p>
+
+<ul class="checklist">
+  <li>首页右上角点击柱状图图标 → 进入统计页面</li>
+  <li>看到连续天数横幅（火焰图标）</li>
+  <li>看到核心数据（知识点数/已掌握/今日待复习）</li>
+  <li>掌握进度条显示正确百分比</li>
+  <li>7 天复习量柱状图正常渲染</li>
+  <li>今日学习区域显示学习时长和复习卡片数</li>
+</ul>
+
+<hr>
+
+<h3>Journey 7：PWA 安装</h3>
+<p class="journey-tag">渐进式 Web 应用</p>
+
+<ul class="checklist">
+  <li>手机浏览器访问部署域名</li>
+  <li>界面移动端适配良好（底部导航、卡片布局）</li>
+  <li>浏览器菜单 → 添加到主屏幕</li>
+  <li>主屏幕出现 App 图标</li>
+  <li>点击图标启动 → 全屏显示，无浏览器地址栏</li>
+</ul>
+
+<!-- =============== PART 3: RESULTS =============== -->
+<h2>第三部分：验收结果记录</h2>
+
+<table>
+  <tr>
+    <th>Journey</th>
+    <th>功能</th>
+    <th>结果</th>
+    <th>备注</th>
+  </tr>
+  <tr><td>1</td><td>注册与登录</td><td><span class="badge badge-skip">待测</span></td><td></td></tr>
+  <tr><td>2</td><td>知识点管理</td><td><span class="badge badge-skip">待测</span></td><td></td></tr>
+  <tr><td>3</td><td>SM-2 复习</td><td><span class="badge badge-skip">待测</span></td><td></td></tr>
+  <tr><td>4</td><td>AI 出题</td><td><span class="badge badge-skip">待测</span></td><td></td></tr>
+  <tr><td>5</td><td>AI 对话 + Agent</td><td><span class="badge badge-skip">待测</span></td><td></td></tr>
+  <tr><td>6</td><td>学习统计</td><td><span class="badge badge-skip">待测</span></td><td></td></tr>
+  <tr><td>7</td><td>PWA 安装</td><td><span class="badge badge-skip">待测</span></td><td></td></tr>
+</table>
+
+<div class="card priority">
+  <h3>验收通过标准</h3>
+  <ol>
+    <li><strong>7/7 通过</strong>：验收合格，可以正式使用</li>
+    <li><strong>Journey 1-3 通过</strong>：MVP 核心可用</li>
+    <li><strong>Journey 4-6 任一失败</strong>：检查 AI API Key 配置</li>
+  </ol>
+</div>
+
+<hr>
+
+<h2>附录：快速排障</h2>
+
+<table>
+  <tr><th>问题</th><th>排查</th></tr>
+  <tr><td>页面白屏</td><td>查看 EdgeOne 构建日志，检查 Node 版本 ≥ 18</td></tr>
+  <tr><td>所有 API 返回 500</td><td>KV 命名空间未绑定或变量名不是 <code>MED_CONFIG</code>/<code>MED_DATA</code></td></tr>
+  <tr><td>登录后刷新掉线</td><td><code>.env.example</code> 中 <code>JWT_SECRET</code> 为空</td></tr>
+  <tr><td>AI 功能不工作</td><td>KV <code>med_config</code> 中无 <code>ai_config</code> 记录，或 API Key 无效/余额不足</td></tr>
+  <tr><td>PWA 无法安装</td><td>必须使用 HTTPS 域名（EdgeOne 默认提供）</td></tr>
+  <tr><td>KV 绑定后仍 500</td><td>绑定后需要 <strong>重新部署</strong> 才能生效</td></tr>
+</table>
+
+<script>
+mermaid.initialize({ theme: 'dark', startOnLoad: true });
+</script>
+</body>
+</html>
