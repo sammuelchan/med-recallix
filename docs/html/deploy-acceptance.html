@@ -128,7 +128,7 @@ git push origin main</code></pre>
   <strong>⚠️ 确认清单</strong>
   <ul class="checklist">
     <li><code>.env.example</code> 中有 <code>JWT_SECRET</code> 值</li>
-    <li><code>edgeone.json</code> 存在且构建命令为 <code>cp .env.example .env && pnpm install && pnpm build</code></li>
+    <li><code>edgeone.json</code> 存在且安装命令为 <code>pnpm install</code>、构建命令为 <code>cp .env.example .env && pnpm run build</code></li>
     <li><code>.gitignore</code> 包含 <code>.env.local</code> 和 <code>.next/</code></li>
   </ul>
 </div>
@@ -150,13 +150,19 @@ git push origin main</code></pre>
 <div class="step">
   <span class="step-number">3</span>
   <div class="step-content">
-    构建设置自动读取 <code>edgeone.json</code>，确认后点击 <strong>部署</strong>
+    构建设置自动读取 <code>edgeone.json</code>，确认各项值正确后点击 <strong>部署</strong>
     <table>
-      <tr><th>设置</th><th>值</th></tr>
-      <tr><td>框架</td><td>Next.js</td></tr>
-      <tr><td>构建命令</td><td><code>cp .env.example .env && pnpm install && pnpm build</code></td></tr>
+      <tr><th>设置项</th><th>值</th></tr>
+      <tr><td>框架预设</td><td>Next</td></tr>
+      <tr><td>根目录</td><td><code>./</code></td></tr>
       <tr><td>输出目录</td><td><code>.next</code></td></tr>
+      <tr><td>构建命令</td><td><code>cp .env.example .env && pnpm run build</code></td></tr>
+      <tr><td>安装命令</td><td><code>pnpm install</code></td></tr>
     </table>
+    <p style="color: var(--text-muted); font-size: 0.88em;">
+      ⚠️ 安装命令和构建命令是<strong>分开填写</strong>的。<code>cp .env.example .env</code> 放在构建命令中，
+      确保构建时 <code>JWT_SECRET</code> 等环境变量从 <code>.env.example</code> 注入。
+    </p>
   </div>
 </div>
 <div class="step">
