@@ -1,3 +1,9 @@
+/**
+ * ScrollArea — custom scrollbar component backed by @base-ui/react.
+ *
+ * Pre-installed but not yet used — available for long content areas
+ * (e.g. chat history, knowledge lists with custom scrollbars).
+ */
 "use client"
 
 import * as React from "react"

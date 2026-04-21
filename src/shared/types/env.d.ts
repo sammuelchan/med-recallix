@@ -1,3 +1,13 @@
+/**
+ * Global Type Declarations — EdgeOne KV bindings and environment variables.
+ *
+ * MED_CONFIG / MED_DATA are KV namespace bindings injected by EdgeOne Pages
+ * into the global scope of Edge Functions. They are undefined in Next.js
+ * API routes (Node.js runtime), which is why the HTTP proxy pattern exists.
+ *
+ * EdgeOneKV defines the KV binding interface provided by Tencent EdgeOne.
+ */
+
 declare namespace NodeJS {
   interface ProcessEnv {
     JWT_SECRET?: string;

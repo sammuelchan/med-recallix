@@ -1,15 +1,23 @@
 /**
  * KV Storage Abstraction Layer
  *
- * Priority chain:
- *   1. EdgeOne KV binding (production)  — global vars MED_CONFIG / MED_DATA
- *   2. EdgeOne KV proxy (production)    — internal fetch to /api/kv/* edge function
- *   3. Local file storage (dev)         — ~/.med-recallix/kv/{namespace}/{key}.json
- *   4. In-memory Map (dev fallback)     — volatile, lost on restart
+ * Provides a unified JSON get/put/delete/list API over multiple backends.
+ * The adapter is chosen per-call based on the runtime environment:
+ *
+ *   Priority chain:
+ *   1. EdgeOne KV binding (Edge Functions) — globalThis.MED_CONFIG / MED_DATA
+ *   2. HTTP proxy (Next.js API routes in production) — POST /api/kv/* edge function
+ *   3. Local file storage (dev) — ~/.med-recallix/kv/{namespace}/{key}.json
+ *   4. In-memory Map (Edge Runtime dev fallback) — volatile, lost on restart
+ *
+ * Two KV namespaces are used:
+ *   "config" → MED_CONFIG binding, stores AI settings, JWT secrets
+ *   "data"   → MED_DATA binding, stores user data (knowledge, chats, reviews)
  */
 
 import { getFileKV } from "./kv.local";
 
+/** Uniform interface that all KV backends implement. */
 interface KVAdapter {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
@@ -17,6 +25,7 @@ interface KVAdapter {
   list(options?: { prefix?: string; limit?: number }): Promise<string[]>;
 }
 
+/** Wrap native EdgeOne KV binding into the KVAdapter interface. */
 function wrapEdgeOneKV(binding: EdgeOneKV): KVAdapter {
   return {
     get: (key) => binding.get(key),
@@ -32,6 +41,7 @@ function wrapEdgeOneKV(binding: EdgeOneKV): KVAdapter {
   };
 }
 
+/** Determine base URL for the internal KV HTTP proxy (production only). */
 function getKvProxyBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL;
@@ -45,8 +55,14 @@ function getKvProxyBaseUrl(): string {
   return "";
 }
 
+/** Shared secret to authenticate proxy requests (must match edge-functions/api/kv). */
 const KV_PROXY_SECRET = "med-kv-internal-2024";
 
+/**
+ * HTTP proxy adapter — used by Next.js API routes in production where
+ * globalThis KV bindings are unavailable. Delegates to the EdgeOne Edge
+ * Function at /api/kv/* which has direct access to KV bindings.
+ */
 function createProxyAdapter(ns: "config" | "data"): KVAdapter {
   const base = getKvProxyBaseUrl();
 
@@ -94,7 +110,9 @@ function detectProduction(): boolean {
   return isProduction;
 }
 
+/** Select the appropriate KV adapter for the current runtime environment. */
 function getAdapter(ns: "config" | "data"): KVAdapter {
+  // 1. Production — direct EdgeOne KV binding (available in Edge Functions)
   const binding =
     ns === "config"
       ? (globalThis as Record<string, unknown>).MED_CONFIG
@@ -104,13 +122,16 @@ function getAdapter(ns: "config" | "data"): KVAdapter {
     return wrapEdgeOneKV(binding as EdgeOneKV);
   }
 
+  // 2. Production — no binding → proxy via Edge Function HTTP endpoint
   if (detectProduction()) {
     return createProxyAdapter(ns);
   }
 
+  // 3. Development — local file system (falls back to in-memory inside kv.local)
   return getFileKV(ns === "config" ? "med_config" : "med_data");
 }
 
+/** Read a JSON value from KV. Returns null if the key does not exist. */
 export async function kvGet<T>(
   key: string,
   ns: "config" | "data" = "data",
@@ -125,6 +146,7 @@ export async function kvGet<T>(
   }
 }
 
+/** Write a JSON value to KV (upsert). */
 export async function kvPut<T>(
   key: string,
   value: T,
@@ -133,6 +155,7 @@ export async function kvPut<T>(
   await getAdapter(ns).put(key, JSON.stringify(value));
 }
 
+/** Delete a key from KV (no-op if key does not exist). */
 export async function kvDelete(
   key: string,
   ns: "config" | "data" = "data",
@@ -140,6 +163,7 @@ export async function kvDelete(
   await getAdapter(ns).delete(key);
 }
 
+/** List keys matching a prefix from KV. */
 export async function kvList(
   prefix: string,
   ns: "config" | "data" = "data",

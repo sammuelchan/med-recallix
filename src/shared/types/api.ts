@@ -1,3 +1,15 @@
+/**
+ * Shared API Type Definitions
+ *
+ * Standard response envelopes for all API routes:
+ *   - ApiResponse<T>      — single-item success/error wrapper
+ *   - ApiError            — error detail shape
+ *   - PaginatedResponse<T> — list with total count and hasMore flag
+ *
+ * These types are available for future type-safe API consumers
+ * (e.g. SWR hooks, tRPC-like wrappers).
+ */
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;

@@ -1,3 +1,8 @@
+/**
+ * Label — styled form label with disabled-peer opacity handling.
+ *
+ * Used in auth forms, settings page, and knowledge form.
+ */
 "use client"
 
 import * as React from "react"

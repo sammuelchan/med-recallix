@@ -1,8 +1,14 @@
 /**
- * Local file-based KV storage for development.
+ * Local file-based KV storage — development / testing only.
  *
- * Storage path: ~/.med-recallix/kv/{namespace}/{key}.json
- * Falls back to in-memory Map if filesystem is unavailable (e.g. Edge Runtime).
+ * Storage path: $MED_RECALLIX_HOME/kv/{namespace}/{key}.json
+ *               (defaults to ~/.med-recallix/kv/...)
+ *
+ * Falls back to an in-memory Map when the Node.js fs module is unavailable
+ * (e.g. when bundled for an Edge Runtime environment).
+ *
+ * Node built-ins (fs, path, os) are loaded lazily via dynamic import so this
+ * file can be safely imported in both Node and Edge contexts without blowing up.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -13,6 +19,7 @@ let _os: any = null;
 let _initDone = false;
 let _initPromise: Promise<void> | null = null;
 
+/** Lazy-load Node.js built-ins; silently swallows import errors in Edge Runtime. */
 async function initModules(): Promise<void> {
   if (_initDone) return;
   if (_initPromise) return _initPromise;
@@ -29,6 +36,7 @@ async function initModules(): Promise<void> {
   return _initPromise;
 }
 
+/** Resolve (and ensure) the storage directory for a given namespace; null if fs unavailable. */
 function getStorageDir(namespace: string): string | null {
   if (!_fs || !_path || !_os) return null;
   const homedir = typeof _os.homedir === "function" ? _os.homedir() : _os.default?.homedir?.();
@@ -43,6 +51,7 @@ function getStorageDir(namespace: string): string | null {
   return dir;
 }
 
+/** URL-encode keys to make them filesystem-safe. */
 function safeFileName(key: string): string {
   return encodeURIComponent(key) + ".json";
 }
@@ -51,6 +60,7 @@ function keyFromFileName(file: string): string {
   return decodeURIComponent(file.replace(/\.json$/, ""));
 }
 
+/** Per-namespace in-memory fallback stores (volatile). */
 const memoryStores = new Map<string, Map<string, string>>();
 function getMemStore(ns: string): Map<string, string> {
   if (!memoryStores.has(ns)) memoryStores.set(ns, new Map());
@@ -66,6 +76,10 @@ function pathJoin(...args: string[]): string {
   return join(...args);
 }
 
+/**
+ * Return a KVAdapter backed by the local file system (or in-memory map).
+ * Each call returns a fresh adapter closure bound to the given namespace.
+ */
 export function getFileKV(namespace: string) {
   return {
     async get(key: string): Promise<string | null> {

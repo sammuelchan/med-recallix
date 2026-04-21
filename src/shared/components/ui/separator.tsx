@@ -1,3 +1,8 @@
+/**
+ * Separator — horizontal/vertical divider backed by @base-ui/react.
+ *
+ * Pre-installed but not yet used — available for section dividers.
+ */
 "use client"
 
 import { Separator as SeparatorPrimitive } from "@base-ui/react/separator"

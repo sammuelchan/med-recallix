@@ -18,6 +18,11 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// 典型 API Route 文件 只做三件事：校验 → 调用 Service → 返回响应
+// 1. 校验用户是否登录
+// 2. 解析请求体
+// 3. 调用 Service 创建知识点
+// 4. 返回响应
 export async function POST(req: NextRequest) {
   try {
     const userId = await getUserId(req);

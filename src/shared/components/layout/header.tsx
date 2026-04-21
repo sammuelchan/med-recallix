@@ -1,3 +1,9 @@
+/**
+ * Page Header — sticky top bar with title and optional action slot.
+ *
+ * Used on every app page to provide consistent navigation context.
+ * The action slot can hold a button (e.g. "Add" on Knowledge page).
+ */
 "use client";
 
 interface HeaderProps {

@@ -22,8 +22,9 @@ export async function middleware(req: NextRequest) {
   const isPublicApi = PUBLIC_API.some((p) => pathname === p);
 
   if (!isApi && !isProtectedPage && !isAuthPage) return NextResponse.next();
+  // 公开 API 不进行验证
   if (isPublicApi) return NextResponse.next();
-
+  // 验证 JWT
   let isAuthenticated = false;
   let userId: string | undefined;
 
@@ -38,6 +39,7 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // 如果请求是 API 且未认证，返回 401
   if (isApi && !isAuthenticated) {
     return NextResponse.json(
       { success: false, error: "未登录" },
@@ -45,16 +47,19 @@ export async function middleware(req: NextRequest) {
     );
   }
 
+  // 如果请求是受保护的页面且未认证，重定向到登录页面
   if (isProtectedPage && !isAuthenticated) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
+  // 如果请求是认证页面且已认证，重定向到仪表盘
   if (isAuthPage && isAuthenticated) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
+  // 如果用户已认证，注入 userId 到请求头
   if (userId) {
     const headers = new Headers(req.headers);
     headers.set("x-user-id", userId);

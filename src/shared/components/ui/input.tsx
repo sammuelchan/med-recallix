@@ -1,3 +1,10 @@
+/**
+ * Input — styled text input backed by @base-ui/react.
+ *
+ * Provides consistent focus ring, disabled, and aria-invalid styles.
+ * Used in auth forms, settings, knowledge search, and knowledge form.
+ */
+
 import * as React from "react"
 import { Input as InputPrimitive } from "@base-ui/react/input"
 

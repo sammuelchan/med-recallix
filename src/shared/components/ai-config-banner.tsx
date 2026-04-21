@@ -1,3 +1,10 @@
+/**
+ * AI Config Banner — prompts the user to configure an API key.
+ *
+ * Renders an amber warning banner that links to /settings when no AI API
+ * key is detected. Automatically hidden while loading or after the key
+ * is configured. Displayed on Dashboard and Chat pages.
+ */
 "use client";
 
 import Link from "next/link";

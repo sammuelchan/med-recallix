@@ -1,3 +1,12 @@
+/**
+ * Toaster — toast notification component wrapping Sonner library.
+ *
+ * Integrates with next-themes for dark mode, uses Lucide icons, and
+ * maps CSS variables to the app's design tokens (OKLCH palette).
+ *
+ * Pre-installed but not yet mounted in the root layout — add <Toaster />
+ * to layout.tsx to enable toast notifications app-wide.
+ */
 "use client"
 
 import { useTheme } from "next-themes"

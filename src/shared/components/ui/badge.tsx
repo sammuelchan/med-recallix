@@ -1,3 +1,10 @@
+/**
+ * Badge — inline status/tag indicator with 6 variants.
+ *
+ * Built on @base-ui/react's useRender for polymorphic rendering.
+ * Used in Knowledge module to display category and difficulty tags.
+ */
+
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"

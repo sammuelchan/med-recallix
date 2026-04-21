@@ -1,3 +1,10 @@
+/**
+ * Page Container — constrains page content to max-w-lg with padding.
+ *
+ * Adds bottom padding (pb-20) to avoid overlap with the fixed BottomNav.
+ * Paired with Header on every app page for consistent layout.
+ */
+
 import { cn } from "@/shared/lib/utils";
 
 interface PageContainerProps {

@@ -1,3 +1,9 @@
+/**
+ * Select — dropdown component backed by @base-ui/react.
+ *
+ * Full composition API with scroll arrows, groups, and separators.
+ * Pre-installed but not yet used — available for future model/provider selectors.
+ */
 "use client"
 
 import * as React from "react"

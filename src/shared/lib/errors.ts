@@ -1,3 +1,11 @@
+/**
+ * Application Error Hierarchy
+ *
+ * Typed errors for API responses. Each carries an HTTP status code and a
+ * machine-readable code string. API route catch blocks use `instanceof` to
+ * decide the response status; `toJSON()` produces the standard error envelope.
+ */
+
 export class AppError extends Error {
   constructor(
     message: string,

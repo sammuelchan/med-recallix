@@ -1,3 +1,10 @@
+/**
+ * Button — shadcn/ui component backed by @base-ui/react.
+ *
+ * 6 variants (default, outline, secondary, ghost, destructive, link)
+ * and 8 sizes including icon-only variants.
+ * Uses CVA (class-variance-authority) for type-safe variant composition.
+ */
 "use client"
 
 import { Button as ButtonPrimitive } from "@base-ui/react/button"

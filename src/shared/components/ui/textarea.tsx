@@ -1,3 +1,10 @@
+/**
+ * Textarea — native textarea with design-system styling.
+ *
+ * Uses CSS `field-sizing: content` for auto-height.
+ * Used in knowledge-form (description) and chat-input.
+ */
+
 import * as React from "react"
 
 import { cn } from "@/shared/lib/utils"

@@ -20,6 +20,7 @@ export const QuizService = {
       throw new Error("尚未配置 AI API Key，请前往「设置」页面配置后再试");
     }
 
+    // 创建 AI 客户端 并构建提示词
     const client = createAIClient(config);
     const prompt = buildQuizPrompt(
       kps.map((kp) => ({ title: kp.title, content: kp.content })),

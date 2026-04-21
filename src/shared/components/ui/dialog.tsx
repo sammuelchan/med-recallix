@@ -1,3 +1,10 @@
+/**
+ * Dialog — modal overlay component backed by @base-ui/react.
+ *
+ * Full composition API: Dialog, Trigger, Content, Title, Description,
+ * Header, Footer, Close. Currently pre-installed but not yet used in
+ * app pages — available for future confirmation/action modals.
+ */
 "use client"
 
 import * as React from "react"

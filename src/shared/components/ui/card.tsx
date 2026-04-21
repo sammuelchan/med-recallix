@@ -1,3 +1,9 @@
+/**
+ * Card — composable card layout with header, content, footer, and action slots.
+ *
+ * Supports "default" and "sm" sizes. Used in auth forms (login/register).
+ */
+
 import * as React from "react"
 
 import { cn } from "@/shared/lib/utils"

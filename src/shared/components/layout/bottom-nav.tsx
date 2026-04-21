@@ -1,3 +1,11 @@
+/**
+ * Bottom Navigation Bar — mobile-first tab bar fixed at viewport bottom.
+ *
+ * Five tabs: Dashboard, Knowledge, Review, Chat, Settings.
+ * Active state is determined by matching the current pathname prefix.
+ * Uses backdrop-blur for a glass-morphism effect and `safe-bottom` for
+ * devices with home-bar safe areas (iPhone notch).
+ */
 "use client";
 
 import { usePathname } from "next/navigation";

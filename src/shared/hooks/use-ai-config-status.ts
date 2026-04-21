@@ -1,3 +1,12 @@
+/**
+ * Hook: AI Config Status
+ *
+ * Client-side hook that checks whether the AI API key has been configured.
+ * Calls GET /api/config on mount and exposes { hasKey, loading }.
+ *
+ * Used by AIConfigBanner to conditionally show the "configure AI" prompt
+ * on Dashboard and Chat pages.
+ */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,6 +16,7 @@ interface AIConfigStatus {
   loading: boolean;
 }
 
+/** Returns whether the user has configured an AI API key. */
 export function useAIConfigStatus(): AIConfigStatus {
   const [status, setStatus] = useState<AIConfigStatus>({
     hasKey: true,

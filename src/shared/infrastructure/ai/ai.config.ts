@@ -1,3 +1,17 @@
+/**
+ * AI Configuration Manager
+ *
+ * Loads / persists AI provider settings (API key, base URL, model name).
+ * Settings are merged from three sources with this priority:
+ *
+ *   1. KV storage   — user-configured values via /settings page
+ *   2. Environment   — KIMI_API_KEY / AI_API_KEY, AI_BASE_URL, AI_MODEL
+ *   3. Built-in defaults — Moonshot (moonshot-v1-auto)
+ *
+ * The settings page calls setAIConfig() to persist changes to KV,
+ * so they survive redeployments without env var changes.
+ */
+
 import { kvGet, kvPut, CONFIG_KEYS } from "@/shared/infrastructure/kv";
 
 export interface AIConfig {
@@ -12,12 +26,7 @@ const DEFAULT_CONFIG: AIConfig = {
   model: "moonshot-v1-auto",
 };
 
-/**
- * AI configuration priority chain:
- *   1. KV storage (EdgeOne production / local file dev)
- *   2. Environment variables (KIMI_API_KEY, AI_BASE_URL, AI_MODEL)
- *   3. Built-in defaults
- */
+/** Resolve the effective AI config by merging KV → env → defaults. */
 export async function getAIConfig(): Promise<AIConfig> {
   const stored = await kvGet<AIConfig>(CONFIG_KEYS.aiConfig, "config");
 
@@ -40,6 +49,7 @@ export async function getAIConfig(): Promise<AIConfig> {
   return config;
 }
 
+/** Merge partial updates into the current config and persist to KV. */
 export async function setAIConfig(
   update: Partial<AIConfig>,
 ): Promise<AIConfig> {
