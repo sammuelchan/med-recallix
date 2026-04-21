@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
 import { KnowledgeService } from "@/modules/knowledge";
 import { AppError } from "@/shared/lib/errors";
+import { getUserId } from "@/shared/lib/get-user-id";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = req.headers.get("x-user-id");
+  const userId = await getUserId(req);
   if (!userId)
     return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 

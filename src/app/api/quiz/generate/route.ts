@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { QuizService, GenerateQuizSchema } from "@/modules/quiz";
 import { AppError } from "@/shared/lib/errors";
+import { getUserId } from "@/shared/lib/get-user-id";
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = req.headers.get("x-user-id");
+    const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const body = await req.json();

@@ -3,9 +3,10 @@ import { ReviewService } from "@/modules/review";
 import { KnowledgeService } from "@/modules/knowledge";
 import { EpisodeService } from "@/modules/agent";
 import { toISODateString } from "@/shared/lib/utils";
+import { getUserId } from "@/shared/lib/get-user-id";
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get("x-user-id");
+  const userId = await getUserId(req);
   if (!userId)
     return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 

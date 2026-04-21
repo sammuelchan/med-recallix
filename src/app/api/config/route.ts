@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAIConfig, setAIConfig } from "@/shared/infrastructure/ai";
 import { maskApiKey } from "@/shared/lib/validators";
+import { getUserId } from "@/shared/lib/get-user-id";
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = req.headers.get("x-user-id");
+    const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const config = await getAIConfig();
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const userId = req.headers.get("x-user-id");
+    const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const body = await req.json();

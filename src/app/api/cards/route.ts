@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
+import { getUserId } from "@/shared/lib/get-user-id";
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = req.headers.get("x-user-id");
+    const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const isSummary =

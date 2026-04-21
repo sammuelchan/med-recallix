@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { KnowledgeService, CreateKPSchema } from "@/modules/knowledge";
 import { ReviewService } from "@/modules/review";
 import { AppError } from "@/shared/lib/errors";
+import { getUserId } from "@/shared/lib/get-user-id";
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = req.headers.get("x-user-id");
+    const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const category = req.nextUrl.searchParams.get("category") ?? undefined;
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = req.headers.get("x-user-id");
+    const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const body = await req.json();
