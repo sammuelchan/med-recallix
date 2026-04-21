@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Med-Recallix 功能模块详解</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-hover: #242836;
+  --text: #e4e4e7;
+  --text-muted: #9ca3af;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --success: #22c55e;
+  --warning: #eab308;
+  --danger: #ef4444;
+  --border: #2d3348;
+  --code-bg: #1e2130;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.3rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1.1rem; margin: 1.5rem 0 0.75rem; }
+p { margin: 0.5rem 0; }
+a { color: var(--accent-light); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { color: var(--text); }
+code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+pre { background: var(--code-bg); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+pre code { background: none; padding: 0; }
+ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+li { margin: 0.3rem 0; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.92em; }
+th, td { padding: 0.6rem 0.8rem; border: 1px solid var(--border); text-align: left; }
+th { background: var(--bg-card); font-weight: 600; }
+.subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; }
+.important-always-visible {
+  background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.08));
+  border-left: 4px solid var(--accent);
+  padding: 1.2rem 1.5rem;
+  border-radius: 0 8px 8px 0;
+  margin: 1.5rem 0;
+}
+.card { background: var(--bg-card); border-radius: 12px; padding: 1.2rem 1.5rem; margin: 1rem 0; border: 1px solid var(--border); }
+.card.priority { border-left: 4px solid var(--success); }
+.card.warning { border-left: 4px solid var(--warning); }
+.card.danger { border-left: 4px solid var(--danger); }
+.step-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: white; font-weight: 700; font-size: 0.85rem;
+  margin-right: 0.5rem; flex-shrink: 0;
+}
+.step { display: flex; align-items: flex-start; margin: 1rem 0; }
+.step-content { flex: 1; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 0.78rem; font-weight: 600;
+}
+.badge-pass { background: rgba(34,197,94,0.15); color: var(--success); }
+.badge-fail { background: rgba(239,68,68,0.15); color: var(--danger); }
+.badge-skip { background: rgba(156,163,175,0.15); color: var(--text-muted); }
+details.collapsible { margin: 0.75rem 0; }
+details.collapsible summary {
+  cursor: pointer; font-weight: 600; padding: 0.6rem 0;
+  color: var(--accent-light); list-style: none;
+}
+details.collapsible summary::before { content: '▶ '; font-size: 0.8em; }
+details.collapsible[open] summary::before { content: '▼ '; }
+.collapsible-content { padding: 0.5rem 0 0.5rem 1rem; border-left: 2px solid var(--border); }
+.checklist { list-style: none; padding-left: 0; }
+.checklist li { padding: 0.4rem 0; padding-left: 1.8rem; position: relative; }
+.checklist li::before { content: '☐'; position: absolute; left: 0; color: var(--text-muted); font-size: 1.1em; }
+.diagram-container { margin: 1rem 0; background: var(--bg-card); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+.journey-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-light); margin-bottom: 0.3rem; }
+hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Med-Recallix 功能模块详解</h1>
+<p class="subtitle">6 大功能模块 × 14 个 API 端点 × 9 个页面</p>
+
+<div class="important-always-visible">
+  <p style="margin:0;"><strong>说明：</strong>下表将「同一路径的多种 HTTP 方法」合并为一条端点行（如 <code>GET, POST /api/knowledge</code>），共 <strong>14</strong> 条；按单次 HTTP 调用计为 <strong>16</strong> 次。配置、档案、统计等辅助接口见折叠附表。</p>
+</div>
+
+<h2>1. 模块全景</h2>
+<p>六大模块的数据流与协作关系如下：<code>auth</code> 为全局提供 <code>userId</code>；<code>knowledge</code> 驱动 <code>review</code> 与 <code>quiz</code>；<code>agent</code> 为 <code>chat</code> 构建上下文；<code>review</code> 与 <code>agent</code> 通过 episode 等机制联动。</p>
+
+<div class="diagram-container">
+  <div class="mermaid">
+flowchart TB
+  subgraph auth["认证 auth"]
+    A[auth.service / use-auth]
+  end
+  subgraph knowledge["知识点 knowledge"]
+    K[knowledge.service]
+  end
+  subgraph review["复习 review"]
+    R[review.service / SM-2]
+  end
+  subgraph quiz["出题 quiz"]
+    Q[quiz.service]
+  end
+  subgraph agent["AI Agent"]
+    G[soul / context / memory / episode / profile]
+  end
+  subgraph chat["对话 chat"]
+    C[chat.service / stream]
+  end
+  A -->|userId| K
+  A -->|userId| R
+  A -->|userId| Q
+  A -->|userId| C
+  A -->|userId| G
+  K -->|新建 KP 自动建卡| R
+  K -->|KP 作为题源| Q
+  G -->|上下文与记忆| C
+  R -->|episode / 学习轨迹| G
+  </div>
+</div>
+
+<h2>2. 认证模块（Auth）</h2>
+<p class="journey-tag">文件与类型</p>
+<ul>
+  <li><strong>文件：</strong><code>auth.service.ts</code>、<code>auth.schema.ts</code>、<code>use-auth.ts</code>、<code>components/</code></li>
+  <li><strong>API：</strong><code>POST /api/auth/register</code>、<code>POST /api/auth/login</code>、<code>GET /api/auth/me</code></li>
+  <li><strong>关键类型：</strong><code>AuthUser</code>、<code>StoredUser</code>、<code>JWTPayload</code></li>
+</ul>
+<div class="card">
+  <strong>流程概要</strong>：注册 → PBKDF2 哈希 → 写入 KV → JWT 签发 → HttpOnly Cookie。
+</div>
+<ul>
+  <li><strong>安全：</strong>PBKDF2，迭代 100,000；盐 16 字节；摘要算法 SHA-256。</li>
+</ul>
+
+<details class="collapsible">
+  <summary>示例：认证数据流（伪代码）</summary>
+  <div class="collapsible-content">
+<pre><code>// 注册：密码不落盘明文
+hash = PBKDF2(password, salt, 100000, SHA-256)
+kv.put(`user:${username}`, { hash, salt, ... })
+// 登录成功：Set-Cookie: token=jwt.sign(JWTPayload)</code></pre>
+  </div>
+</details>
+
+<h2>3. 知识点模块（Knowledge）</h2>
+<p class="journey-tag">CRUD · 索引 · 分类 · 标签</p>
+<ul>
+  <li><strong>文件：</strong><code>knowledge.service.ts</code>、<code>knowledge.schema.ts</code>、<code>components/</code></li>
+  <li><strong>API：</strong><code>GET</code>/<code>POST /api/knowledge</code>；<code>GET</code>/<code>PUT</code>/<code>DELETE /api/knowledge/:id</code>；<code>GET /api/knowledge/:id/recall</code></li>
+  <li><strong>能力：</strong>按用户隔离的 CRUD、索引、分类树、标签体系。</li>
+  <li><strong>KV 键示例：</strong><code>kp_{userId}_{id}</code>、<code>kp_index_{userId}</code>、<code>cat_{userId}</code></li>
+  <li><strong>联动：</strong>创建知识点时自动创建对应复习卡片。</li>
+</ul>
+
+<details class="collapsible">
+  <summary>KV 键与索引（示意）</summary>
+  <div class="collapsible-content">
+<pre><code>// 单条 KP 文档
+kp_{userId}_{kpId} → KnowledgePoint JSON
+// 用户侧 ID 列表 / 分类
+kp_index_{userId} → string[]
+cat_{userId}      → CategoryTree JSON</code></pre>
+  </div>
+</details>
+
+<h2>4. 复习模块（Review）— SM-2 核心</h2>
+<ul>
+  <li><strong>文件：</strong><code>review.service.ts</code>、<code>sm2.ts</code>、<code>components/review-timeline.tsx</code></li>
+  <li><strong>API：</strong><code>GET /api/cards</code>、<code>PUT /api/cards/:id</code></li>
+  <li><strong>SM-2：</strong>间隔（interval）、重复次数（repetition）、难度因子（efactor）、评分档 0–5。</li>
+  <li><strong>卡片生命周期：</strong>新卡片 → 学习中 → 复习中 → 已掌握。</li>
+  <li><strong>牌组存储：</strong>用户全部卡片聚合在同一 KV 文档中管理。</li>
+  <li><strong>连续打卡：</strong>统计连续学习日（streak）。</li>
+  <li><strong>复习历史：</strong>每张卡片保留最近约 50 条回溯记录。</li>
+</ul>
+
+<details class="collapsible">
+  <summary>SM-2 评分与调度（概念）</summary>
+  <div class="collapsible-content">
+<pre><code>// grade 0–5 驱动 interval / repetition / efactor 更新
+nextReviewAt = now + schedule(interval, efactor, grade)
+// 时间线组件读取最近 history[] 展示</code></pre>
+  </div>
+</details>
+
+<h2>5. AI Agent 模块</h2>
+<ul>
+  <li><strong>文件：</strong><code>soul.ts</code>、<code>context-builder.ts</code>、<code>profile.service.ts</code>、<code>memory.service.ts</code>、<code>episode.service.ts</code></li>
+  <li><strong>人格（AGENT_SOUL）：</strong>称呼用户为「主人」，医学助理角色定位。</li>
+  <li><strong>上下文构建：</strong>学习档案 + 记忆检索 + 当日 episode → 拼入 system prompt。</li>
+  <li><strong>记忆：</strong>上限约 100 条；关键词召回；重要性打分。</li>
+  <li><strong>档案：</strong>考试目标、科目强弱、学习偏好等。</li>
+  <li><strong>Episode：</strong>按日汇总学习行为（复习次数、时长、测验分数等）。</li>
+</ul>
+
+<details class="collapsible">
+  <summary>上下文拼装顺序（示意）</summary>
+  <div class="collapsible-content">
+<pre><code>system =
+  AGENT_SOUL
+  + formatProfile(profile)
+  + recallMemories(query, max: 100)
+  + todayEpisodeSummary(episode)</code></pre>
+  </div>
+</details>
+
+<h2>6. 对话模块（Chat）</h2>
+<ul>
+  <li><strong>文件：</strong><code>chat.service.ts</code>、<code>use-chat.ts</code>、<code>components/</code></li>
+  <li><strong>API：</strong><code>GET</code>/<code>POST /api/chat</code>；<code>GET</code>/<code>DELETE /api/chat/:sessionId</code></li>
+  <li><strong>流式输出：</strong>Vercel AI SDK <code>streamText</code>，注入 Agent 上下文。</li>
+  <li><strong>会话：</strong>创建、列表、删除、消息历史加载。</li>
+  <li><strong>回复后任务：</strong>记忆抽取、会话压缩（compaction）等。</li>
+  <li><strong>引导：</strong>新用户 onboarding 流程。</li>
+</ul>
+
+<details class="collapsible">
+  <summary>流式对话与后置任务</summary>
+  <div class="collapsible-content">
+<pre><code>streamText({ system: builtContext, messages })
+// 结束后：extractMemoryChunks(), maybeCompactSession()</code></pre>
+  </div>
+</details>
+
+<h2>7. 出题模块（Quiz）</h2>
+<ul>
+  <li><strong>文件：</strong><code>quiz.service.ts</code>、<code>quiz.prompts.ts</code></li>
+  <li><strong>API：</strong><code>POST /api/quiz/generate</code></li>
+  <li><strong>流程：</strong>选择知识点 → 构造 prompt → 模型生成五选一 MCQ（A–E）→ 解析 JSON → <code>QuizQuestion[]</code>。</li>
+  <li><strong>特性：</strong>无持久化题库，请求级无状态生成。</li>
+</ul>
+
+<h2>8. API 端点总览</h2>
+<p class="journey-tag">六大模块 · REST</p>
+<table>
+  <tr>
+    <th>方法</th>
+    <th>路径</th>
+    <th>需登录</th>
+    <th>说明</th>
+  </tr>
+  <tr><td>POST</td><td><code>/api/auth/register</code></td><td>否</td><td>用户注册</td></tr>
+  <tr><td>POST</td><td><code>/api/auth/login</code></td><td>否</td><td>登录并下发 JWT Cookie</td></tr>
+  <tr><td>GET</td><td><code>/api/auth/me</code></td><td>是</td><td>当前用户信息</td></tr>
+  <tr><td>GET, POST</td><td><code>/api/knowledge</code></td><td>是</td><td>列表 / 新建（新建联动复习卡片）</td></tr>
+  <tr><td>GET</td><td><code>/api/knowledge/:id</code></td><td>是</td><td>知识点详情</td></tr>
+  <tr><td>PUT</td><td><code>/api/knowledge/:id</code></td><td>是</td><td>更新知识点</td></tr>
+  <tr><td>DELETE</td><td><code>/api/knowledge/:id</code></td><td>是</td><td>删除知识点</td></tr>
+  <tr><td>GET</td><td><code>/api/knowledge/:id/recall</code></td><td>是</td><td>复习回溯 / 召回数据</td></tr>
+  <tr><td>GET</td><td><code>/api/cards</code></td><td>是</td><td>获取牌组与待复习卡片</td></tr>
+  <tr><td>PUT</td><td><code>/api/cards/:id</code></td><td>是</td><td>评分并更新 SM-2</td></tr>
+  <tr><td>GET, POST</td><td><code>/api/chat</code></td><td>是</td><td>会话列表 / 创建或流式发消息</td></tr>
+  <tr><td>GET</td><td><code>/api/chat/:sessionId</code></td><td>是</td><td>加载会话历史</td></tr>
+  <tr><td>DELETE</td><td><code>/api/chat/:sessionId</code></td><td>是</td><td>删除会话</td></tr>
+  <tr><td>POST</td><td><code>/api/quiz/generate</code></td><td>是</td><td>基于所选 KP 生成 MCQ（A–E）</td></tr>
+</table>
+
+<details class="collapsible">
+  <summary>附：辅助接口（非六大模块表内统计）</summary>
+  <div class="collapsible-content">
+    <table>
+      <tr><th>方法</th><th>路径</th><th>需登录</th><th>说明</th></tr>
+      <tr><td>GET</td><td><code>/api/profile</code></td><td>是</td><td>学习档案</td></tr>
+      <tr><td>PUT</td><td><code>/api/profile</code></td><td>是</td><td>更新档案</td></tr>
+      <tr><td>GET</td><td><code>/api/config</code></td><td>视实现</td><td>读取配置（如 AI）</td></tr>
+      <tr><td>PUT</td><td><code>/api/config</code></td><td>视实现</td><td>写入配置</td></tr>
+      <tr><td>GET</td><td><code>/api/stats</code></td><td>是</td><td>学习统计</td></tr>
+    </table>
+  </div>
+</details>
+
+<div class="card priority">
+  <p style="margin:0;"><strong>页面侧（9 页）：</strong>登录/注册、首页 Dashboard、知识点列表与详情、复习、对话、统计、设置等路由共同构成产品主路径；与上表 API 一一对应实现闭环。</p>
+</div>
+
+<hr>
+<p style="color: var(--text-muted); font-size: 0.88em;">Med-Recallix · 功能模块技术文档 · 适用于内部技术宣讲与架构评审</p>
+
+<script>
+mermaid.initialize({ theme: 'dark', startOnLoad: true });
+</script>
+</body>
+</html>

@@ -21,7 +21,7 @@
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178c6.svg" />
-  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-black.svg" />
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black.svg" />
   <img alt="EdgeOne" src="https://img.shields.io/badge/Deploy-EdgeOne%20Pages-00b4ff.svg" />
   <img alt="PWA" src="https://img.shields.io/badge/PWA-Installable-5a0fc8.svg" />
 </p>
@@ -72,7 +72,7 @@ Med-Recallix 通过 **SM-2 间隔重复算法**（基于 Ebbinghaus 遗忘曲线
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | [Next.js 15](https://nextjs.org/) (App Router) |
+| Framework | [Next.js 16](https://nextjs.org/) (App Router) |
 | Language | [TypeScript](https://www.typescriptlang.org/) 5.x |
 | Styling | [Tailwind CSS 4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) |
 | AI | [Vercel AI SDK](https://sdk.vercel.ai/) + [Kimi-for-coding](https://kimi.com/) (OpenAI compatible) |
@@ -261,6 +261,10 @@ med-recallix/
 
 | Document | Description |
 |----------|-------------|
+| [系统技术架构](./docs/assets/architecture.html) | Architecture overview — layers, data flow, tech decisions |
+| [功能模块详解](./docs/assets/modules.html) | Module deep dive — 6 modules, 14 APIs, relationships |
+| [技术原理深度解析](./docs/assets/tech-deep-dive.html) | Tech deep dive — SM-2, AI agent memory, KV, security |
+| [部署验收指南](./docs/html/deploy-acceptance.html) | Deploy acceptance — EdgeOne setup, 7 user journeys |
 | [REQUIREMENT.md](./docs/REQUIREMENT.md) | Requirements specification — user stories, scope, edge cases |
 | [DESIGN.md](./docs/DESIGN.md) | Technical design — architecture, data model, API, agent memory |
 | [TODO.md](./docs/TODO.md) | Task breakdown — 90 atomic tasks with dependencies |

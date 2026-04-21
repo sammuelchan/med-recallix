@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Med-Recallix 系统技术架构</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-hover: #242836;
+  --text: #e4e4e7;
+  --text-muted: #9ca3af;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --success: #22c55e;
+  --warning: #eab308;
+  --danger: #ef4444;
+  --border: #2d3348;
+  --code-bg: #1e2130;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.3rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1.1rem; margin: 1.5rem 0 0.75rem; }
+p { margin: 0.5rem 0; }
+a { color: var(--accent-light); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { color: var(--text); }
+code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+pre { background: var(--code-bg); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+pre code { background: none; padding: 0; }
+ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+li { margin: 0.3rem 0; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.92em; }
+th, td { padding: 0.6rem 0.8rem; border: 1px solid var(--border); text-align: left; }
+th { background: var(--bg-card); font-weight: 600; }
+.subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; }
+.important-always-visible {
+  background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.08));
+  border-left: 4px solid var(--accent);
+  padding: 1.2rem 1.5rem;
+  border-radius: 0 8px 8px 0;
+  margin: 1.5rem 0;
+}
+.card { background: var(--bg-card); border-radius: 12px; padding: 1.2rem 1.5rem; margin: 1rem 0; border: 1px solid var(--border); }
+.card.priority { border-left: 4px solid var(--success); }
+.card.warning { border-left: 4px solid var(--warning); }
+.card.danger { border-left: 4px solid var(--danger); }
+.step-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: white; font-weight: 700; font-size: 0.85rem;
+  margin-right: 0.5rem; flex-shrink: 0;
+}
+.step { display: flex; align-items: flex-start; margin: 1rem 0; }
+.step-content { flex: 1; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 0.78rem; font-weight: 600;
+}
+.badge-pass { background: rgba(34,197,94,0.15); color: var(--success); }
+.badge-fail { background: rgba(239,68,68,0.15); color: var(--danger); }
+.badge-skip { background: rgba(156,163,175,0.15); color: var(--text-muted); }
+details.collapsible { margin: 0.75rem 0; }
+details.collapsible summary {
+  cursor: pointer; font-weight: 600; padding: 0.6rem 0;
+  color: var(--accent-light); list-style: none;
+}
+details.collapsible summary::before { content: '▶ '; font-size: 0.8em; }
+details.collapsible[open] summary::before { content: '▼ '; }
+.collapsible-content { padding: 0.5rem 0 0.5rem 1rem; border-left: 2px solid var(--border); }
+.checklist { list-style: none; padding-left: 0; }
+.checklist li { padding: 0.4rem 0; padding-left: 1.8rem; position: relative; }
+.checklist li::before { content: '☐'; position: absolute; left: 0; color: var(--text-muted); font-size: 1.1em; }
+.diagram-container { margin: 1rem 0; background: var(--bg-card); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+.journey-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-light); margin-bottom: 0.3rem; }
+hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Med-Recallix 系统技术架构</h1>
+<p class="subtitle">医学考试记忆辅助学习系统 — 全栈技术架构解析</p>
+
+<div class="important-always-visible">
+  <p style="margin:0;"><strong>一句话</strong>：基于 SM-2 间隔重复算法与 AI Agent 的医学考试记忆辅助学习 PWA，前后端一体部署于 EdgeOne Pages，数据经 Edge Function 代理访问分布式 KV。</p>
+</div>
+
+<h2>1. 项目概览</h2>
+<p>面向医学考试场景，将间隔复习、知识点管理与对话式 AI 助手整合为可安装的 Web 应用，降低运维成本并贴近全球边缘访问。</p>
+
+<table>
+  <tr><th>层级</th><th>技术栈</th></tr>
+  <tr><td>前端</td><td>Next.js 16 + React 19 + TypeScript + Tailwind CSS v4</td></tr>
+  <tr><td>后端</td><td>Next.js API Routes（Node.js Runtime）</td></tr>
+  <tr><td>AI</td><td>Vercel AI SDK + OpenAI 兼容 API（Moonshot / DeepSeek 等）</td></tr>
+  <tr><td>存储</td><td>EdgeOne Pages KV（分布式键值存储）</td></tr>
+  <tr><td>部署</td><td>EdgeOne Pages（Edge CDN + Functions）</td></tr>
+  <tr><td>PWA</td><td>Service Worker + Web App Manifest</td></tr>
+</table>
+
+<h2>2. 系统架构图</h2>
+<p>请求经 CDN 进入 Next.js；业务 API 访问 AI 直连或通过 Edge Function 访问 KV，Middleware 在路由层统一做 JWT 鉴权。</p>
+
+<div class="diagram-container">
+  <div class="mermaid">
+flowchart TB
+  subgraph client["客户端"]
+    BR[浏览器 PWA]
+  end
+  subgraph edge["边缘"]
+    CDN[Edge CDN]
+    EF[Edge Functions<br/>KV 代理]
+  end
+  subgraph srv["服务端"]
+    MW[Middleware<br/>JWT 鉴权]
+    AR[Next.js App Router]
+    API[API Routes]
+  end
+  subgraph ext["外部能力"]
+    KV[(KV 存储)]
+    AIP[(AI API)]
+  end
+  BR --> CDN --> MW --> AR
+  AR --> API
+  API --> EF
+  API --> AIP
+  EF --> KV
+  </div>
+</div>
+
+<h2>3. 分层架构</h2>
+
+<div class="diagram-container">
+  <div class="mermaid">
+flowchart TB
+  L1["① 展现层<br/>Pages + Components"]
+  L2["② API 层<br/>Route Handlers"]
+  L3["③ 服务层<br/>功能模块 auth / knowledge / review / chat / quiz / agent"]
+  L4["④ 基础设施层<br/>KV · AI · Config"]
+  L1 --> L2 --> L3 --> L4
+  </div>
+</div>
+
+<ul>
+  <li><strong>展现层</strong>：App Router 页面与可复用组件，负责交互与展示，尽量保持轻逻辑。</li>
+  <li><strong>API 层</strong>：REST 风格路由处理器，解析请求、校验会话、编排服务调用。</li>
+  <li><strong>服务层</strong>：按领域划分的业务模块，封装复习算法、对话、出题与 Agent 行为。</li>
+  <li><strong>基础设施层</strong>：KV 持久化、AI 流式调用与运行时配置读取，对上提供稳定接口。</li>
+</ul>
+
+<h2>4. 数据流</h2>
+<p>典型已登录请求：浏览器携带 Cookie，Middleware 校验 JWT 后进入 API，服务层访问 KV 并返回 JSON。</p>
+
+<div class="diagram-container">
+  <div class="mermaid">
+sequenceDiagram
+  participant U as 用户
+  participant B as 浏览器
+  participant M as Middleware
+  participant R as API Route
+  participant S as Service
+  participant K as KV
+  U->>B: 操作界面
+  B->>M: HTTP 请求含 Cookie
+  M->>R: JWT 合法则转发
+  R->>S: 调用业务逻辑
+  S->>K: 读写数据
+  K-->>S: 结果
+  S-->>R: DTO
+  R-->>B: JSON 响应
+  B-->>U: 渲染更新
+  </div>
+</div>
+
+<h2>5. 目录结构</h2>
+
+<pre><code>med-recallix/
+├── src/app/           # Next.js App Router 页面 + API routes
+│   ├── (app)/         # 需登录的应用页
+│   ├── (auth)/        # 登录 / 注册
+│   └── api/           # RESTful API
+├── src/modules/       # 功能模块：auth、knowledge、review、chat、quiz、agent
+├── src/shared/        # 共享基础设施、组件、hooks
+├── edge-functions/    # EdgeOne Edge Functions（KV 代理）
+├── public/            # PWA：sw.js、图标等
+└── docs/              # 文档</code></pre>
+
+<h2>6. 核心技术选型</h2>
+
+<div class="card">
+<details class="collapsible">
+  <summary>为何采用 Next.js 16（App Router、RSC、Edge）</summary>
+  <div class="collapsible-content">
+    <p>统一技术栈减少上下文切换；App Router 与 RSC 利于路由与数据边界清晰；可按需在 Edge 与 Node 运行时之间取舍，适配 Pages 部署模型。</p>
+  </div>
+</details>
+</div>
+
+<div class="card">
+<details class="collapsible">
+  <summary>为何采用 EdgeOne Pages KV（Serverless、免运维、全球分布）</summary>
+  <div class="collapsible-content">
+    <p>无需自建数据库集群，按量扩展；键值模型契合用户配置与业务 JSON 文档；与 Edge Function 同域集成，通过代理安全访问。</p>
+  </div>
+</details>
+</div>
+
+<div class="card">
+<details class="collapsible">
+  <summary>为何 SM-2 + SuperMemo 思路（经典算法、轻量）</summary>
+  <div class="collapsible-content">
+    <p>医学记忆场景验证充分；实现体量小、易测试；与产品「复习卡片」模型天然契合。</p>
+  </div>
+</details>
+</div>
+
+<div class="card">
+<details class="collapsible">
+  <summary>为何 Vercel AI SDK（流式、多厂商）</summary>
+  <div class="collapsible-content">
+    <p>统一流式响应与工具调用抽象；可切换 Moonshot、DeepSeek 等 OpenAI 兼容端点，降低供应商锁定感知。</p>
+  </div>
+</details>
+</div>
+
+<div class="card">
+<details class="collapsible">
+  <summary>为何 PWA（跨端、可安装、可离线能力）</summary>
+  <div class="collapsible-content">
+    <p>医学生多用手机碎片学习；安装到主屏幕接近原生体验；Service Worker 为静态与缓存策略提供基础（具体离线范围以实现为准）。</p>
+  </div>
+</details>
+</div>
+
+<h2>7. 安全架构</h2>
+
+<div class="card priority">
+  <ul>
+    <li><strong>JWT + HttpOnly Cookie</strong>：令牌不暴露给页面脚本，降低 XSS 窃取风险。</li>
+    <li><strong>PBKDF2 密码哈希</strong>：约 10 万次迭代、SHA-256，拖慢离线暴力破解。</li>
+    <li><strong>Middleware 鉴权闸门</strong>：在路由层统一拦截未登录访问受保护资源。</li>
+    <li><strong>KV 代理与密钥保护</strong>：敏感配置经 Edge Function / 服务端访问 KV，避免前端直连与密钥泄露。</li>
+  </ul>
+</div>
+
+<hr>
+<p style="color: var(--text-muted); font-size: 0.88em;">Med-Recallix 技术架构 · 适用于内部技术宣讲与评审</p>
+
+<script>
+mermaid.initialize({ theme: 'dark', startOnLoad: true });
+</script>
+</body>
+</html>
