@@ -27,10 +27,9 @@ export async function POST(req: NextRequest) {
       );
     }
     const msg = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack : undefined;
-    console.error("[login] Unhandled error:", msg, stack);
+    console.error("[login] Unhandled error:", msg);
     return NextResponse.json(
-      { success: false, error: "服务器内部错误", debug: msg },
+      { success: false, error: "服务器内部错误" },
       { status: 500 },
     );
   }

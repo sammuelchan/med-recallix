@@ -2,28 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { register, LoginSchema, buildCookieHeader } from "@/modules/auth";
 import { AppError } from "@/shared/lib/errors";
 
-export async function GET() {
-  const g = globalThis as Record<string, unknown>;
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  const w = typeof self !== "undefined" ? (self as any) : undefined;
-  const globalKeys = Object.keys(g).filter(k =>
-    k.toUpperCase().includes("MED") || k.toUpperCase().includes("KV")
-  );
-  return NextResponse.json({
-    hasMedData: !!g.MED_DATA,
-    hasMedConfig: !!g.MED_CONFIG,
-    medDataType: typeof g.MED_DATA,
-    medConfigType: typeof g.MED_CONFIG,
-    selfMedData: typeof w?.MED_DATA,
-    selfMedConfig: typeof w?.MED_CONFIG,
-    jwtSecret: !!process.env.JWT_SECRET,
-    nodeEnv: process.env.NODE_ENV,
-    globalKeys,
-    hasSelf: typeof self !== "undefined",
-  });
-  /* eslint-enable @typescript-eslint/no-explicit-any */
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -49,10 +27,9 @@ export async function POST(req: NextRequest) {
       );
     }
     const msg = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack : undefined;
-    console.error("[register] Unhandled error:", msg, stack);
+    console.error("[register] Unhandled error:", msg);
     return NextResponse.json(
-      { success: false, error: "服务器内部错误", debug: msg },
+      { success: false, error: "服务器内部错误" },
       { status: 500 },
     );
   }

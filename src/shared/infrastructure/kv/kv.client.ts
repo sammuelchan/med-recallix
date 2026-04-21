@@ -3,8 +3,9 @@
  *
  * Priority chain:
  *   1. EdgeOne KV binding (production)  — global vars MED_CONFIG / MED_DATA
- *   2. Local file storage (dev)         — ~/.med-recallix/kv/{namespace}/{key}.json
- *   3. In-memory Map (dev fallback)     — volatile, lost on restart
+ *   2. EdgeOne KV proxy (production)    — internal fetch to /api/kv/* edge function
+ *   3. Local file storage (dev)         — ~/.med-recallix/kv/{namespace}/{key}.json
+ *   4. In-memory Map (dev fallback)     — volatile, lost on restart
  */
 
 import { getFileKV } from "./kv.local";
@@ -31,6 +32,68 @@ function wrapEdgeOneKV(binding: EdgeOneKV): KVAdapter {
   };
 }
 
+function getKvProxyBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return "";
+}
+
+const KV_PROXY_SECRET = "med-kv-internal-2024";
+
+function createProxyAdapter(ns: "config" | "data"): KVAdapter {
+  const base = getKvProxyBaseUrl();
+
+  async function call<T>(action: string, body: Record<string, unknown>): Promise<T> {
+    const res = await fetch(`${base}/api/kv/${action}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-kv-secret": KV_PROXY_SECRET,
+      },
+      body: JSON.stringify({ ns, ...body }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`KV proxy ${action} failed (${res.status}): ${text}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
+  return {
+    async get(key) {
+      const { value } = await call<{ value: string | null }>("get", { key });
+      return value;
+    },
+    async put(key, value) {
+      await call("put", { key, value });
+    },
+    async delete(key) {
+      await call("delete", { key });
+    },
+    async list(options) {
+      const { keys } = await call<{ keys: string[] }>("list", {
+        prefix: options?.prefix,
+        limit: options?.limit ?? 256,
+      });
+      return keys;
+    },
+  };
+}
+
+let isProduction: boolean | null = null;
+function detectProduction(): boolean {
+  if (isProduction !== null) return isProduction;
+  isProduction = process.env.NODE_ENV === "production";
+  return isProduction;
+}
+
 function getAdapter(ns: "config" | "data"): KVAdapter {
   const binding =
     ns === "config"
@@ -39,6 +102,10 @@ function getAdapter(ns: "config" | "data"): KVAdapter {
 
   if (binding) {
     return wrapEdgeOneKV(binding as EdgeOneKV);
+  }
+
+  if (detectProduction()) {
+    return createProxyAdapter(ns);
   }
 
   return getFileKV(ns === "config" ? "med_config" : "med_data");
