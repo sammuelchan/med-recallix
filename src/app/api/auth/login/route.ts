@@ -1,3 +1,10 @@
+/**
+ * Login API Route
+ *
+ * POST /api/auth/login → validate credentials, issue JWT, set HttpOnly cookie.
+ * Returns AuthUser (id + username) on success.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { login, LoginSchema, buildCookieHeader } from "@/modules/auth";
 import { AppError } from "@/shared/lib/errors";

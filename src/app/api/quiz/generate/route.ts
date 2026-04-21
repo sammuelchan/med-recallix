@@ -1,3 +1,11 @@
+/**
+ * Quiz Generation API Route
+ *
+ * POST /api/quiz/generate → generate AI-powered MCQ questions from
+ * selected knowledge points. Returns array of QuizQuestion with
+ * stem, 5 options, answer, and explanation.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { QuizService, GenerateQuizSchema } from "@/modules/quiz";
 import { AppError } from "@/shared/lib/errors";

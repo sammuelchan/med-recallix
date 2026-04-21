@@ -1,3 +1,5 @@
+/** Zod schema for chat message API input. bootstrap=true triggers profile setup flow. */
+
 import { z } from "zod";
 
 export const SendMessageSchema = z.object({

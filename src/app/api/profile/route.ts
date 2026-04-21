@@ -1,3 +1,13 @@
+/**
+ * Profile API Route — user study profile
+ *
+ * GET /api/profile → check if profile exists and return it
+ * PUT /api/profile → create or update study profile (exam target, subjects, etc.)
+ *
+ * Used by the bootstrap chat flow to save the auto-collected profile,
+ * and by the settings page for manual edits.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { ProfileService } from "@/modules/agent";
 import { getUserId } from "@/shared/lib/get-user-id";

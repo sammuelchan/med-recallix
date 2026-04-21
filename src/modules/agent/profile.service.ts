@@ -1,3 +1,11 @@
+/**
+ * Profile Service — user study profile management
+ *
+ * Stores exam target, strong/weak subjects, daily goal, and preferences.
+ * Profile is collected during the bootstrap chat and can be updated
+ * from the settings page. Provides sensible defaults for missing fields.
+ */
+
 import { kvGet, kvPut, kvKeys } from "@/shared/infrastructure/kv";
 import type { UserProfile } from "./agent.types";
 

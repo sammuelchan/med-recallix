@@ -1,3 +1,11 @@
+/**
+ * Knowledge Point Detail API Route
+ *
+ * GET    /api/knowledge/:id → read single knowledge point
+ * PUT    /api/knowledge/:id → update knowledge point fields
+ * DELETE /api/knowledge/:id → delete knowledge point + linked review card
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { KnowledgeService, UpdateKPSchema } from "@/modules/knowledge";
 import { ReviewService } from "@/modules/review";

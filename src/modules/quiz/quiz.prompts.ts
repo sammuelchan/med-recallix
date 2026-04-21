@@ -1,3 +1,8 @@
+/**
+ * Build a structured prompt for medical MCQ generation.
+ * Outputs instructions for A1/A2-type single-choice questions
+ * with strict JSON format requirements for reliable parsing.
+ */
 export function buildQuizPrompt(
   knowledgePoints: { title: string; content: string }[],
   count: number,

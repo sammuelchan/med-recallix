@@ -1,3 +1,13 @@
+/**
+ * AI Agent Domain Types
+ *
+ * UserProfile   — study preferences and exam info collected during bootstrap
+ * MemoryEntry   — single long-term memory fact (weakness, insight, milestone, etc.)
+ * LongTermMemory — capped collection of memory entries with compaction tracking
+ * DailyEpisode  — today's learning activity summary (minutes, reviews, quiz)
+ * AgentContext  — assembled system prompt + message window passed to the LLM
+ */
+
 export interface UserProfile {
   nickname: string;
   examTarget: string;

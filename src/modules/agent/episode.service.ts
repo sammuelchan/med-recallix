@@ -1,3 +1,17 @@
+/**
+ * Episode Service — daily learning activity tracking
+ *
+ * Each day has a single DailyEpisode record in KV, keyed by userId + date.
+ * Tracks study minutes, reviewed card count, quiz score, and topics covered.
+ *
+ * Called as a side effect from:
+ *   - ReviewService.reviewCard → trackReview (increment reviewed count + topic)
+ *   - ChatService.runPostReplyTasks → trackStudyMinutes (increment by 1)
+ *   - Quiz page → trackQuizScore (after quiz completion)
+ *
+ * Data feeds the Stats dashboard and the agent's daily context block.
+ */
+
 import { kvGet, kvPut, kvKeys } from "@/shared/infrastructure/kv";
 import { toISODateString } from "@/shared/lib/utils";
 import type { DailyEpisode } from "./agent.types";

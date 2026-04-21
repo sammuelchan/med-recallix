@@ -1,3 +1,5 @@
+/** Zod schemas for auth form validation — shared between API routes and client forms. */
+
 import { z } from "zod";
 
 export const LoginSchema = z.object({

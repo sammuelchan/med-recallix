@@ -1,3 +1,11 @@
+/**
+ * Knowledge Recall API Route
+ *
+ * GET /api/knowledge/:id/recall → returns KP title + SM-2 card state
+ * (interval, repetition, efactor, dueDate) + full review history.
+ * Used by ReviewTimeline component on the knowledge detail page.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
 import { KnowledgeService } from "@/modules/knowledge";

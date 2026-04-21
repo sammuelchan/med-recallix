@@ -1,3 +1,10 @@
+/**
+ * Chat Session Detail API Route
+ *
+ * GET    /api/chat/:sessionId → get full message history for a session
+ * DELETE /api/chat/:sessionId → delete session and remove from index
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { ChatService } from "@/modules/chat";
 import { AppError } from "@/shared/lib/errors";

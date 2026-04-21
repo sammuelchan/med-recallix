@@ -1,8 +1,21 @@
+/**
+ * Chat API Route
+ *
+ * GET  → list all chat sessions for the current user
+ * POST → send a message and stream AI reply (SSE via Vercel AI SDK)
+ *        Supports normal mode and bootstrap mode (first-run profile setup).
+ *        Returns x-chat-session-id header with the active session ID.
+ *
+ * Error handling covers: missing API key, unsupported model, insufficient
+ * balance, invalid key — each with a user-friendly Chinese error message.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { ChatService, SendMessageSchema } from "@/modules/chat";
 import { AppError } from "@/shared/lib/errors";
 import { getUserId } from "@/shared/lib/get-user-id";
 
+/** GET /api/chat — list all sessions sorted by last message time. */
 export async function GET(req: NextRequest) {
   try {
     const userId = await getUserId(req);

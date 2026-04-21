@@ -1,3 +1,10 @@
+/**
+ * Card Grade API Route
+ *
+ * PUT /api/cards/:id → submit SM-2 grade (0–5) for a specific card.
+ * Advances the card's spaced repetition state and returns updated card.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewService, ReviewGradeSchema } from "@/modules/review";
 import { AppError } from "@/shared/lib/errors";

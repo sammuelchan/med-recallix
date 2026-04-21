@@ -1,3 +1,10 @@
+/**
+ * Current User API Route
+ *
+ * GET /api/auth/me → verify session cookie and return current user info.
+ * Used by useAuth() hook to check login status on page load.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { verifyJWT, AUTH_COOKIE_NAME } from "@/modules/auth";
 

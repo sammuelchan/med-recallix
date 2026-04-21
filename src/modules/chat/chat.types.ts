@@ -1,3 +1,11 @@
+/**
+ * Chat Domain Types
+ *
+ * ChatMessage       — single user or assistant message with timestamp
+ * ChatSession       — full session including messages and optional compacted summary
+ * ChatSessionIndex  — lightweight index entry for session list rendering
+ */
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;

@@ -1,3 +1,11 @@
+/**
+ * Cards API Route — review card queries
+ *
+ * GET /api/cards              → due cards list
+ * GET /api/cards?summary=true → due summary + streak + total cards
+ * GET /api/cards?streak=true  → streak data only
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
 import { getUserId } from "@/shared/lib/get-user-id";

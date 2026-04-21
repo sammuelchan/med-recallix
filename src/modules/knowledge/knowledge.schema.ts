@@ -1,3 +1,5 @@
+/** Zod schemas for knowledge point creation and update (used in API routes). */
+
 import { z } from "zod";
 
 export const CreateKPSchema = z.object({

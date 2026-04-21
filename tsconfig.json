@@ -1,5 +1,4 @@
 {
-  //编译选项
   "compilerOptions": {
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
@@ -15,7 +14,6 @@
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [{ "name": "next" }],
-    //路径别名
     "paths": {
       "@/*": ["./src/*"],
       "@/modules/*": ["./src/modules/*"],

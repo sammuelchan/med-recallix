@@ -1,3 +1,12 @@
+/**
+ * Stats API Route — aggregate learning statistics for the dashboard
+ *
+ * Returns: KP count, card counts (mastered/learning/new/due), streak,
+ * today's episode, and a 7-day activity chart (reviews + study minutes).
+ *
+ * Mastery criteria: repetition >= 3 AND efactor >= 2.5 (SM-2 threshold).
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
 import { KnowledgeService } from "@/modules/knowledge";

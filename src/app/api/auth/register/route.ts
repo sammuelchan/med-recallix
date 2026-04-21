@@ -1,3 +1,11 @@
+/**
+ * Register API Route
+ *
+ * POST /api/auth/register → create new user, hash password, issue JWT,
+ * set HttpOnly cookie. Returns 201 with AuthUser on success, 409 if
+ * username already exists.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { register, LoginSchema, buildCookieHeader } from "@/modules/auth";
 import { AppError } from "@/shared/lib/errors";

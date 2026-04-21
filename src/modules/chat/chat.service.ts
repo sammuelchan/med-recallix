@@ -1,3 +1,22 @@
+/**
+ * Chat Service — AI conversation management with multi-layer memory
+ *
+ * Core responsibilities:
+ *   1. Session CRUD — create, list, get history, delete sessions
+ *   2. AI streaming  — streamReply (normal) and streamBootstrap (first-run profile setup)
+ *   3. Post-reply tasks (fire-and-forget):
+ *      a. Memory extraction — LLM analyses the exchange for memorable facts
+ *      b. Session compaction — when messages exceed 40, older messages are
+ *         summarised and replaced with a compressed summary string
+ *      c. Episode tracking — increments daily study minutes
+ *
+ * Data model:
+ *   Session record → kvKeys.chatSession(userId, sessionId) → ChatSession
+ *   Session index  → kvKeys.chatIndex(userId)               → ChatSessionIndex[]
+ *
+ * The session title is auto-set to the first 20 chars of the first user message.
+ */
+
 import { streamText, generateText } from "ai";
 import { buildAgentContext, BOOTSTRAP_PROMPT } from "@/modules/agent";
 import { MemoryService, EpisodeService } from "@/modules/agent";
@@ -7,6 +26,7 @@ import { NotFoundError } from "@/shared/lib/errors";
 import { generateId } from "@/shared/lib/utils";
 import type { ChatMessage, ChatSession, ChatSessionIndex } from "./chat.types";
 
+/** Insert or update a session entry in the user's session index. */
 async function upsertIndex(userId: string, entry: ChatSessionIndex): Promise<void> {
   const index =
     (await kvGet<ChatSessionIndex[]>(kvKeys.chatIndex(userId))) ?? [];
@@ -103,6 +123,12 @@ export const ChatService = {
     );
   },
 
+  /**
+   * Stream an AI reply in a normal conversation session.
+   * Builds full agent context (soul + profile + memories + episode + history)
+   * and returns a Vercel AI SDK streaming response.
+   * On finish: saves assistant message, then fires post-reply background tasks.
+   */
   async streamReply(
     userId: string,
     sessionId: string,
@@ -148,6 +174,11 @@ export const ChatService = {
     });
   },
 
+  /**
+   * Stream a bootstrap conversation for new users without a study profile.
+   * Uses BOOTSTRAP_PROMPT to guide the user through profile setup.
+   * The client detects JSON in the reply to auto-save the profile.
+   */
   async streamBootstrap(
     userId: string,
     sessionId: string,
@@ -182,9 +213,15 @@ export const ChatService = {
   },
 };
 
-const COMPACTION_THRESHOLD = 40;
-const COMPACTION_KEEP_RECENT = 20;
+const COMPACTION_THRESHOLD = 40;  // trigger compaction after this many messages
+const COMPACTION_KEEP_RECENT = 20; // keep this many recent messages after compaction
 
+/**
+ * Background tasks after each AI reply (all fire-and-forget):
+ *   1. Extract memorable facts from the exchange into long-term memory
+ *   2. Compact old messages into a summary if threshold exceeded
+ *   3. Track 1 minute of study time in today's episode
+ */
 async function runPostReplyTasks(
   userId: string,
   sessionId: string,
@@ -199,6 +236,10 @@ async function runPostReplyTasks(
   ]);
 }
 
+/**
+ * Ask the LLM to identify memorable facts from a user↔AI exchange.
+ * Extracted entries are persisted via MemoryService for future context recall.
+ */
 async function extractMemory(
   userId: string,
   userMessage: string,
@@ -252,6 +293,12 @@ ${assistantReply.slice(0, 500)}
   }
 }
 
+/**
+ * Compact a session when it exceeds COMPACTION_THRESHOLD messages.
+ * Older messages are summarised by the LLM into a ≤200-char digest,
+ * then replaced, keeping only the most recent COMPACTION_KEEP_RECENT messages.
+ * The summary is appended to session.summary for context continuity.
+ */
 async function maybeCompactSession(
   userId: string,
   sessionId: string,

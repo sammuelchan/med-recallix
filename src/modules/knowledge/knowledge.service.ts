@@ -1,3 +1,17 @@
+/**
+ * Knowledge Point Service
+ *
+ * CRUD for medical knowledge points with:
+ *   - Per-user KV storage (each KP stored individually for fast access)
+ *   - Lightweight index (KPIndexItem[]) for list/search without loading full content
+ *   - Hierarchical category tree rebuilt on every write for category navigation
+ *
+ * Data model:
+ *   KP record  → kvKeys.knowledgePoint(userId, kpId) → full KnowledgePoint
+ *   KP index   → kvKeys.knowledgeIndex(userId)       → KPIndexItem[]
+ *   Categories → kvKeys.category(userId)              → CategoryTree
+ */
+
 import { kvGet, kvPut, kvDelete, kvKeys } from "@/shared/infrastructure/kv";
 import { generateId } from "@/shared/lib/utils";
 import { NotFoundError } from "@/shared/lib/errors";
@@ -111,6 +125,11 @@ export const KnowledgeService = {
     );
   },
 
+  /**
+   * Rebuild category tree from index — walks each KP's category[] path
+   * (e.g. ["内科", "心血管", "高血压"]) to build a nested CategoryNode tree
+   * with per-node count. Persisted to KV for fast category nav rendering.
+   */
   async rebuildCategoryTree(
     userId: string,
     index: KPIndexItem[],

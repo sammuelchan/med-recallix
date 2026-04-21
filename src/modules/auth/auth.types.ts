@@ -1,3 +1,11 @@
+/**
+ * Auth Domain Types
+ *
+ * AuthUser   — public user info returned by API (no sensitive fields)
+ * StoredUser — full record in KV including password hash and salt
+ * JWTPayload — decoded claims from the session token
+ */
+
 export interface AuthUser {
   id: string;
   username: string;

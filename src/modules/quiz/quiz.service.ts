@@ -1,3 +1,14 @@
+/**
+ * Quiz Service — AI-powered medical MCQ generation
+ *
+ * Loads the requested knowledge points, builds a structured prompt for
+ * A1/A2-style medical exam questions, and parses the LLM's JSON response
+ * into typed QuizQuestion objects.
+ *
+ * Each generated question gets a unique nanoid and includes stem, 5 options
+ * (A–E), correct answer label, and an explanation.
+ */
+
 import { generateText } from "ai";
 import { createAIClient, getAIConfig } from "@/shared/infrastructure/ai";
 import { KnowledgeService } from "@/modules/knowledge";
@@ -20,7 +31,6 @@ export const QuizService = {
       throw new Error("尚未配置 AI API Key，请前往「设置」页面配置后再试");
     }
 
-    // 创建 AI 客户端 并构建提示词
     const client = createAIClient(config);
     const prompt = buildQuizPrompt(
       kps.map((kp) => ({ title: kp.title, content: kp.content })),

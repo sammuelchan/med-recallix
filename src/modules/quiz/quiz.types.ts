@@ -1,3 +1,11 @@
+/**
+ * Quiz Domain Types
+ *
+ * QuizOption   — single answer option (label A–E + text)
+ * QuizQuestion — one MCQ with stem, options, correct answer, and explanation
+ * QuizSession  — client-side quiz state (questions, user answers, final score)
+ */
+
 export interface QuizOption {
   label: string;
   text: string;

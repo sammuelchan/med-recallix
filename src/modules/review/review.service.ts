@@ -5,10 +5,21 @@ import { calculateNextReview, createCard, isDue } from "./sm2";
 import { EpisodeService } from "@/modules/agent";
 import type { Card, Deck, StreakData, DueSummary, ReviewGrade } from "./review.types";
 
-// 复习服务  牌组操作
+/**
+ * Review Service — spaced repetition deck management
+ *
+ * Manages the user's review deck (stored as a single KV entry per user):
+ *   - addCard: link a knowledge point to a review card
+ *   - reviewCard: grade a card (SM-2) and record history
+ *   - getDueCards / getDueSummary: find cards ready for review
+ *   - updateStreak: track consecutive study days
+ *
+ * Side effects after each review:
+ *   - Updates the user's study streak
+ *   - Records the review in today's DailyEpisode (agent memory)
+ */
 export const ReviewService = {
   async getDeck(userId: string): Promise<Deck> {
-    // 从KV获取牌组，不存在则返回空牌组
     return (
       (await kvGet<Deck>(kvKeys.deck(userId))) ?? {
         userId,
@@ -24,7 +35,6 @@ export const ReviewService = {
     title: string,
   ): Promise<Card> {
     const deck = await this.getDeck(userId);
-    // 检查是否已存在相同知识点的卡片
     const existing = deck.cards.find(
       (c) => c.knowledgePointId === knowledgePointId,
     );
@@ -54,7 +64,6 @@ export const ReviewService = {
       interval: updated.interval,
       efactor: updated.efactor,
     });
-    // 如果复习历史超过50条，截取最后50条
     if (updated.reviewHistory.length > 50) {
       updated.reviewHistory = updated.reviewHistory.slice(-50);
     }
@@ -62,7 +71,6 @@ export const ReviewService = {
     deck.updatedAt = new Date().toISOString();
     await kvPut(kvKeys.deck(userId), deck);
 
-    // 副作用隔离：更新连续学习天数 并记录复习日志
     await this.updateStreak(userId);
     EpisodeService.trackReview(userId, updated.title).catch(() => {});
 

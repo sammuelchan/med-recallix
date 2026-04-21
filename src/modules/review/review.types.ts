@@ -1,3 +1,13 @@
+/**
+ * Review Domain Types
+ *
+ * Card       — SM-2 flashcard with scheduling state and optional review history
+ * Deck       — per-user collection of all cards
+ * StreakData  — consecutive study day tracking
+ * DueSummary  — dashboard card counts (due/overdue/new)
+ * ReviewGrade — SM-2 grade scale 0–5
+ */
+
 export interface ReviewLog {
   date: string;
   grade: ReviewGrade;

@@ -1,9 +1,25 @@
+/**
+ * Agent Context Builder — assembles the LLM system prompt from multiple layers
+ *
+ * The system prompt is constructed by merging these building blocks:
+ *   1. AGENT_SOUL      — persona, tone, responsibilities
+ *   2. AGENT_RULES     — behavioral constraints
+ *   3. User Profile    — exam target, strong/weak subjects, study preferences
+ *   4. Long-term Memory — keyword-recalled entries from past interactions
+ *   5. Daily Episode   — today's study stats (minutes, reviews, quiz score)
+ *   6. Early Summary   — compacted summary from older messages in the session
+ *
+ * The chat history window is capped at the most recent 20 messages to stay
+ * within token limits while preserving conversational coherence.
+ */
+
 import { AGENT_RULES, AGENT_SOUL } from "./soul";
 import { ProfileService } from "./profile.service";
 import { MemoryService } from "./memory.service";
 import { EpisodeService } from "./episode.service";
 import type { AgentContext } from "./agent.types";
 
+/** Extract Chinese words and English tokens from text for memory keyword recall. */
 function extractKeywords(text: string): string[] {
   const raw =
     text.match(/[\u4e00-\u9fff]{1,8}|[a-zA-Z][a-zA-Z0-9-]{1,24}/g) ?? [];
@@ -66,6 +82,7 @@ interface BuildOptions {
   summary?: string;
 }
 
+/** Build the full agent context (system prompt + trimmed message history). */
 export async function buildAgentContext(
   userId: string,
   chatHistory: { role: string; content: string }[],

@@ -1,3 +1,5 @@
+/** Zod schema for review grade submission (integer 0–5, SM-2 scale). */
+
 import { z } from "zod";
 
 export const ReviewGradeSchema = z.object({

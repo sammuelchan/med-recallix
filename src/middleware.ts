@@ -1,3 +1,19 @@
+/**
+ * Next.js Middleware — authentication gate for all matched routes.
+ *
+ * Runs at the edge before every matched request. Three responsibilities:
+ *   1. API protection: return 401 JSON for unauthenticated API requests
+ *   2. Page protection: redirect unauthenticated users to /login (with return URL)
+ *   3. Auth page redirect: send already-authenticated users to /dashboard
+ *
+ * On successful JWT verification, injects `x-user-id` header into the request
+ * so downstream API route handlers can read the authenticated user ID without
+ * re-verifying the token (though get-user-id.ts provides a cookie fallback).
+ *
+ * Uses synchronous env-only JWT secret because middleware cannot perform
+ * async KV lookups for the signing key.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
@@ -7,6 +23,7 @@ const PROTECTED_PAGES = ["/dashboard", "/review", "/knowledge", "/quiz", "/chat"
 const AUTH_PAGES = ["/login", "/register"];
 const PUBLIC_API = ["/api/auth/login", "/api/auth/register"];
 
+/** Synchronous JWT secret — env-only, no KV (middleware must be sync-fast). */
 function getJwtSecretSync(): Uint8Array {
   const raw = process.env.JWT_SECRET || "dev-secret-change-in-production";
   return new TextEncoder().encode(raw);
