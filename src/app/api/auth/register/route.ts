@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { register, LoginSchema, buildCookieHeader } from "@/modules/auth";
 import { AppError } from "@/shared/lib/errors";
 
+export async function GET() {
+  const g = globalThis as Record<string, unknown>;
+  return NextResponse.json({
+    hasMedData: !!g.MED_DATA,
+    hasMedConfig: !!g.MED_CONFIG,
+    medDataType: typeof g.MED_DATA,
+    medConfigType: typeof g.MED_CONFIG,
+    jwtSecret: !!process.env.JWT_SECRET,
+    nodeEnv: process.env.NODE_ENV,
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -26,8 +38,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("[register] Unhandled error:", msg, stack);
     return NextResponse.json(
-      { success: false, error: "服务器内部错误" },
+      { success: false, error: "服务器内部错误", debug: msg },
       { status: 500 },
     );
   }
