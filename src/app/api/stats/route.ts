@@ -5,6 +5,9 @@
  * today's episode, and a 7-day activity chart (reviews + study minutes).
  *
  * Mastery criteria: repetition >= 3 AND efactor >= 2.5 (SM-2 threshold).
+ *
+ * Performance: all KV reads are fully parallelised — 7-day episodes use a
+ * single batch-get round-trip instead of 6 sequential fetches.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -20,14 +23,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
   try {
-    const [deck, kpIndex, streak, todayEpisode] = await Promise.all([
+    // Build the 7-day date list upfront
+    const dates: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      dates.push(toISODateString(d));
+    }
+    const today = dates[dates.length - 1];
+
+    // All KV reads in parallel: 3 single-key + 1 batch (7 episodes)
+    const [deck, kpIndex, streak, episodes] = await Promise.all([
       ReviewService.getDeck(userId),
       KnowledgeService.getIndex(userId),
       ReviewService.getStreak(userId),
-      EpisodeService.getEpisode(userId),
+      EpisodeService.getEpisodes(userId, dates),
     ]);
 
-    const today = toISODateString();
     const cards = deck.cards;
     const totalKP = kpIndex.length;
     const totalCards = cards.length;
@@ -36,18 +48,12 @@ export async function GET(req: NextRequest) {
     const newCards = cards.filter((c) => c.repetition === 0).length;
     const dueToday = cards.filter((c) => c.dueDate <= today).length;
 
-    const recentDays: { date: string; count: number; minutes: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = toISODateString(d);
-      const ep = i === 0 ? todayEpisode : await EpisodeService.getEpisode(userId, dateStr);
-      recentDays.push({
-        date: dateStr,
-        count: ep?.reviewedCount ?? 0,
-        minutes: ep?.studyMinutes ?? 0,
-      });
-    }
+    const todayEpisode = episodes[episodes.length - 1];
+    const recentDays = dates.map((date, idx) => ({
+      date,
+      count: episodes[idx]?.reviewedCount ?? 0,
+      minutes: episodes[idx]?.studyMinutes ?? 0,
+    }));
 
     return NextResponse.json({
       success: true,

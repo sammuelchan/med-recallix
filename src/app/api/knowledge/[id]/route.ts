@@ -60,8 +60,10 @@ export async function DELETE(
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const { id } = await params;
-    await ReviewService.removeCardByKP(userId, id);
-    await KnowledgeService.delete(userId, id);
+    await Promise.all([
+      ReviewService.removeCardByKP(userId, id),
+      KnowledgeService.delete(userId, id),
+    ]);
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof AppError) return NextResponse.json(err.toJSON(), { status: err.status });

@@ -12,7 +12,7 @@
  * Data feeds the Stats dashboard and the agent's daily context block.
  */
 
-import { kvGet, kvPut, kvKeys } from "@/shared/infrastructure/kv";
+import { kvGet, kvBatchGet, kvPut, kvKeys } from "@/shared/infrastructure/kv";
 import { toISODateString } from "@/shared/lib/utils";
 import type { DailyEpisode } from "./agent.types";
 
@@ -22,6 +22,16 @@ export const EpisodeService = {
     date: string = toISODateString(),
   ): Promise<DailyEpisode | null> {
     return kvGet<DailyEpisode>(kvKeys.episode(userId, date));
+  },
+
+  /** Batch-fetch multiple episodes in a single KV round-trip. */
+  async getEpisodes(
+    userId: string,
+    dates: string[],
+  ): Promise<(DailyEpisode | null)[]> {
+    if (dates.length === 0) return [];
+    const keys = dates.map((d) => kvKeys.episode(userId, d));
+    return kvBatchGet<DailyEpisode>(keys);
   },
 
   async updateEpisode(

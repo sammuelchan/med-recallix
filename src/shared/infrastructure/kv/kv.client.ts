@@ -20,6 +20,7 @@ import { getFileKV } from "./kv.local";
 /** Uniform interface that all KV backends implement. */
 interface KVAdapter {
   get(key: string): Promise<string | null>;
+  mget(keys: string[]): Promise<(string | null)[]>;
   put(key: string, value: string): Promise<void>;
   delete(key: string): Promise<void>;
   list(options?: { prefix?: string; limit?: number }): Promise<string[]>;
@@ -29,6 +30,7 @@ interface KVAdapter {
 function wrapEdgeOneKV(binding: EdgeOneKV): KVAdapter {
   return {
     get: (key) => binding.get(key),
+    mget: (keys) => Promise.all(keys.map((k) => binding.get(k))),
     put: (key, value) => binding.put(key, value),
     delete: (key) => binding.delete(key),
     async list(options) {
@@ -87,6 +89,10 @@ function createProxyAdapter(ns: "config" | "data"): KVAdapter {
       const { value } = await call<{ value: string | null }>("get", { key });
       return value;
     },
+    async mget(keys: string[]) {
+      const { values } = await call<{ values: (string | null)[] }>("mget", { keys });
+      return values;
+    },
     async put(key, value) {
       await call("put", { key, value });
     },
@@ -144,6 +150,26 @@ export async function kvGet<T>(
     console.error(`[KV] Failed to parse JSON for key "${key}"`);
     return null;
   }
+}
+
+/**
+ * Batch-read multiple JSON values from KV in a single round-trip.
+ * Returns an array in the same order as the input keys (null for missing keys).
+ */
+export async function kvBatchGet<T>(
+  keys: string[],
+  ns: "config" | "data" = "data",
+): Promise<(T | null)[]> {
+  if (keys.length === 0) return [];
+  const rawValues = await getAdapter(ns).mget(keys);
+  return rawValues.map((raw) => {
+    if (raw === null) return null;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  });
 }
 
 /** Write a JSON value to KV (upsert). */

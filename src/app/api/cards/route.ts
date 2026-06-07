@@ -27,14 +27,25 @@ export async function GET(req: NextRequest) {
     }
 
     if (isSummary) {
-      const [summary, streak, deck] = await Promise.all([
-        ReviewService.getDueSummary(userId),
-        ReviewService.getStreak(userId),
+      const [deck, streak] = await Promise.all([
         ReviewService.getDeck(userId),
+        ReviewService.getStreak(userId),
       ]);
+      const today = new Date().toISOString().slice(0, 10);
+      let due = 0, overdue = 0, newToday = 0;
+      for (const card of deck.cards) {
+        if (card.dueDate <= today) {
+          if (card.repetition === 0) newToday++;
+          else if (card.dueDate < today) overdue++;
+          else due++;
+        }
+      }
       return NextResponse.json({
         success: true,
-        data: { summary: { ...summary, total: deck.cards.length }, streak },
+        data: {
+          summary: { due, overdue, newToday, completed: 0, total: deck.cards.length },
+          streak,
+        },
       });
     }
 

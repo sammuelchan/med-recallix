@@ -6,6 +6,7 @@
  *
  * Route: /api/kv/*
  *   POST /api/kv/get    { ns, key }
+ *   POST /api/kv/mget   { ns, keys }          — batch get, returns { values: [] }
  *   POST /api/kv/put    { ns, key, value }
  *   POST /api/kv/delete { ns, key }
  *   POST /api/kv/list   { ns, prefix, limit }
@@ -63,6 +64,12 @@ export async function onRequestPost({ request, params }) {
       case "get": {
         const raw = await binding.get(key);
         return json({ value: raw });
+      }
+      case "mget": {
+        const { keys } = body;
+        if (!Array.isArray(keys)) return json({ error: "keys must be an array" }, 400);
+        const values = await Promise.all(keys.map((k) => binding.get(k)));
+        return json({ values });
       }
       case "put": {
         await binding.put(key, typeof value === "string" ? value : JSON.stringify(value));

@@ -22,11 +22,12 @@ export const QuizService = {
     knowledgePointIds: string[],
     count: number = 5,
   ): Promise<QuizQuestion[]> {
-    const kps = await Promise.all(
-      knowledgePointIds.map((id) => KnowledgeService.get(userId, id)),
-    );
-
-    const config = await getAIConfig();
+    const [kps, config] = await Promise.all([
+      Promise.all(
+        knowledgePointIds.map((id) => KnowledgeService.get(userId, id)),
+      ),
+      getAIConfig(),
+    ]);
     if (!config.apiKey || config.apiKey === "sk-test-placeholder" || config.apiKey.length < 10) {
       throw new Error("尚未配置 AI API Key，请前往「设置」页面配置后再试");
     }

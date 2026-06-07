@@ -95,6 +95,10 @@ export function getFileKV(namespace: string) {
       return getMemStore(namespace).get(key) ?? null;
     },
 
+    async mget(keys: string[]): Promise<(string | null)[]> {
+      return Promise.all(keys.map((k) => this.get(k)));
+    },
+
     async put(key: string, value: string): Promise<void> {
       await initModules();
       const dir = getStorageDir(namespace);

@@ -69,9 +69,10 @@ export const ReviewService = {
     }
     deck.cards[idx] = updated;
     deck.updatedAt = new Date().toISOString();
-    await kvPut(kvKeys.deck(userId), deck);
-
-    await this.updateStreak(userId);
+    await Promise.all([
+      kvPut(kvKeys.deck(userId), deck),
+      this.updateStreak(userId),
+    ]);
     EpisodeService.trackReview(userId, updated.title).catch(() => {});
 
     return updated;

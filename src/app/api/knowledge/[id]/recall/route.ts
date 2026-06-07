@@ -23,8 +23,10 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const kp = await KnowledgeService.get(userId, id);
-    const card = await ReviewService.getCardByKP(userId, id);
+    const [kp, card] = await Promise.all([
+      KnowledgeService.get(userId, id),
+      ReviewService.getCardByKP(userId, id),
+    ]);
 
     return NextResponse.json({
       success: true,

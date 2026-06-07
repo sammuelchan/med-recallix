@@ -279,15 +279,18 @@ ${assistantReply.slice(0, 500)}
       importance: string;
     }>;
 
-    for (const entry of entries) {
-      if (!entry.content || entry.content.length < 4) continue;
-      await MemoryService.addMemory(userId, {
-        category: entry.category as import("@/modules/agent").MemoryEntry["category"],
-        content: entry.content,
-        importance: (entry.importance || "medium") as "high" | "medium" | "low",
-        source: "对话自动提取",
-      });
-    }
+    await Promise.all(
+      entries
+        .filter((entry) => entry.content && entry.content.length >= 4)
+        .map((entry) =>
+          MemoryService.addMemory(userId, {
+            category: entry.category as import("@/modules/agent").MemoryEntry["category"],
+            content: entry.content,
+            importance: (entry.importance || "medium") as "high" | "medium" | "low",
+            source: "对话自动提取",
+          }),
+        ),
+    );
   } catch {
     // non-critical, silently fail
   }

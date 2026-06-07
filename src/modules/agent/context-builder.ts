@@ -88,10 +88,10 @@ export async function buildAgentContext(
   chatHistory: { role: string; content: string }[],
   options?: BuildOptions,
 ): Promise<AgentContext> {
-  const profile = await ProfileService.getProfile(userId);
   const lastUser = [...chatHistory].reverse().find((m) => m.role === "user");
   const keywords = lastUser ? extractKeywords(lastUser.content) : [];
-  const [memories, episode] = await Promise.all([
+  const [profile, memories, episode] = await Promise.all([
+    ProfileService.getProfile(userId),
     MemoryService.recallMemories(userId, keywords),
     EpisodeService.getEpisode(userId),
   ]);
