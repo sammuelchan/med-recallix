@@ -26,8 +26,16 @@ const DEFAULT_CONFIG: AIConfig = {
   model: "moonshot-v1-auto",
 };
 
+let cachedConfig: AIConfig | null = null;
+let cacheTime = 0;
+const CACHE_TTL_MS = 60_000; // 1 minute
+
 /** Resolve the effective AI config by merging KV → env → defaults. */
 export async function getAIConfig(): Promise<AIConfig> {
+  if (cachedConfig && Date.now() - cacheTime < CACHE_TTL_MS) {
+    return cachedConfig;
+  }
+
   const stored = await kvGet<AIConfig>(CONFIG_KEYS.aiConfig, "config");
 
   const config: AIConfig = {
@@ -46,6 +54,8 @@ export async function getAIConfig(): Promise<AIConfig> {
       DEFAULT_CONFIG.model,
   };
 
+  cachedConfig = config;
+  cacheTime = Date.now();
   return config;
 }
 
@@ -56,5 +66,7 @@ export async function setAIConfig(
   const current = await getAIConfig();
   const merged = { ...current, ...update };
   await kvPut(CONFIG_KEYS.aiConfig, merged, "config");
+  cachedConfig = merged;
+  cacheTime = Date.now();
   return merged;
 }

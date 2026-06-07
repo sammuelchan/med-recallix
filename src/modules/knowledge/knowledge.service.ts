@@ -19,8 +19,6 @@ import { NotFoundError } from "@/shared/lib/errors";
 import type {
   KnowledgePoint,
   KPIndexItem,
-  CategoryTree,
-  CategoryNode,
 } from "./knowledge.types";
 import type { CreateKPInput, UpdateKPInput } from "./knowledge.schema";
 
@@ -92,9 +90,6 @@ export const KnowledgeService = {
       kvPut(kvKeys.knowledgeIndex(userId), index),
     ]);
 
-    // Fire-and-forget: category tree rebuild (non-critical path)
-    this.rebuildCategoryTree(userId, index).catch(() => {});
-
     return kp;
   },
 
@@ -162,8 +157,6 @@ export const KnowledgeService = {
       kvPut(kvKeys.knowledgeIndex(userId), index),
     ]);
 
-    this.rebuildCategoryTree(userId, index).catch(() => {});
-
     return updated;
   },
 
@@ -175,55 +168,9 @@ export const KnowledgeService = {
     ]);
     const filtered = index.filter((item) => item.id !== kpId);
     await kvPut(kvKeys.knowledgeIndex(userId), filtered);
-    this.rebuildCategoryTree(userId, filtered).catch(() => {});
   },
 
   async getIndex(userId: string): Promise<KPIndexItem[]> {
     return (await kvGet<KPIndexItem[]>(kvKeys.knowledgeIndex(userId))) ?? [];
-  },
-
-  async getCategoryTree(userId: string): Promise<CategoryTree> {
-    return (
-      (await kvGet<CategoryTree>(kvKeys.category(userId))) ?? { roots: [] }
-    );
-  },
-
-  /**
-   * Rebuild category tree from index — walks each KP's category[] path
-   * (e.g. ["内科", "心血管", "高血压"]) to build a nested CategoryNode tree
-   * with per-node count. Persisted to KV for fast category nav rendering.
-   */
-  async rebuildCategoryTree(
-    userId: string,
-    index: KPIndexItem[],
-  ): Promise<void> {
-    const rootMap = new Map<string, CategoryNode>();
-
-    for (const item of index) {
-      if (item.category.length === 0) continue;
-
-      const [root, ...rest] = item.category;
-      if (!rootMap.has(root)) {
-        rootMap.set(root, { name: root, children: [], count: 0 });
-      }
-      const rootNode = rootMap.get(root)!;
-      rootNode.count++;
-
-      let parent = rootNode;
-      for (const seg of rest) {
-        let child = parent.children.find((c) => c.name === seg);
-        if (!child) {
-          child = { name: seg, children: [], count: 0 };
-          parent.children.push(child);
-        }
-        child.count++;
-        parent = child;
-      }
-    }
-
-    const tree: CategoryTree = {
-      roots: Array.from(rootMap.values()),
-    };
-    await kvPut(kvKeys.category(userId), tree);
   },
 };

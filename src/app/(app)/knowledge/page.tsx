@@ -6,7 +6,8 @@ import { Header } from "@/shared/components/layout";
 import { PageContainer } from "@/shared/components/layout";
 import { Input } from "@/shared/components/ui/input";
 import { KnowledgeCard } from "@/modules/knowledge/components/knowledge-card";
-import { Plus, Search, X } from "lucide-react";
+import { Plus, Search, X, Sparkles } from "lucide-react";
+import { cachedFetch, invalidateCachePrefix } from "@/shared/lib/fetch-cache";
 import type { KPIndexItem } from "@/modules/knowledge";
 
 export default function KnowledgePage() {
@@ -16,10 +17,10 @@ export default function KnowledgePage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/knowledge")
-      .then((r) => r.json())
+    invalidateCachePrefix("/api/knowledge");
+    cachedFetch<{ success: boolean; data?: KPIndexItem[] }>("/api/knowledge", { ttl: 15_000 })
       .then((json) => {
-        if (json.success) setItems(json.data);
+        if (json.success && json.data) setItems(json.data);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -68,12 +69,21 @@ export default function KnowledgePage() {
       <Header
         title="知识点"
         action={
-          <Link
-            href="/knowledge/new"
-            className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"
-          >
-            <Plus className="size-4" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/knowledge/exam"
+              className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              title="问答测验"
+            >
+              <Sparkles className="size-4" />
+            </Link>
+            <Link
+              href="/knowledge/new"
+              className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+            >
+              <Plus className="size-4" />
+            </Link>
+          </div>
         }
       />
       <PageContainer>

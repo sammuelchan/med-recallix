@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     const session = await ChatService.getOrCreateSession(userId, input.sessionId);
     const ts = new Date().toISOString();
-    await ChatService.addMessage(userId, session.sessionId, {
+    const updatedSession = await ChatService.addMessage(userId, session.sessionId, {
       role: "user",
       content: input.message,
       timestamp: ts,
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     const result = input.bootstrap
       ? await ChatService.streamBootstrap(userId, session.sessionId)
-      : await ChatService.streamReply(userId, session.sessionId, input.message);
+      : await ChatService.streamReply(userId, session.sessionId, input.message, updatedSession);
 
     const res = result.toUIMessageStreamResponse();
     const headers = new Headers(res.headers);

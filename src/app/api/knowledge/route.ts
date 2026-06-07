@@ -16,6 +16,27 @@ export async function GET(req: NextRequest) {
     const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
+    // Batch fetch by IDs (for review page)
+    const ids = req.nextUrl.searchParams.get("ids");
+    if (ids) {
+      const { kvBatchGet, kvKeys } = await import("@/shared/infrastructure/kv");
+      const idList = ids.split(",").filter(Boolean);
+      const keys = idList.map((id) => kvKeys.knowledgePoint(userId, id));
+      const results = await kvBatchGet<import("@/modules/knowledge").KnowledgePoint>(keys);
+      const map: Record<string, { contentMode: string; content: string; qaItems?: unknown[] }> = {};
+      for (let i = 0; i < idList.length; i++) {
+        const kp = results[i];
+        if (kp) {
+          map[idList[i]] = {
+            contentMode: kp.contentMode ?? "text",
+            content: kp.content,
+            qaItems: kp.qaItems,
+          };
+        }
+      }
+      return NextResponse.json({ success: true, data: map });
+    }
+
     const category = req.nextUrl.searchParams.get("category") ?? undefined;
     const items = await KnowledgeService.list(userId, category);
     return NextResponse.json({ success: true, data: items });

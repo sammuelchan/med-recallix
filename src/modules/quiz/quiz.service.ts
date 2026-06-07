@@ -11,10 +11,11 @@
 
 import { generateText } from "ai";
 import { createAIClient, getAIConfig } from "@/shared/infrastructure/ai";
-import { KnowledgeService } from "@/modules/knowledge";
+import { kvBatchGet, kvKeys } from "@/shared/infrastructure/kv";
 import { generateId } from "@/shared/lib/utils";
 import { buildQuizPrompt } from "./quiz.prompts";
 import type { QuizQuestion } from "./quiz.types";
+import type { KnowledgePoint } from "@/modules/knowledge";
 
 export const QuizService = {
   async generate(
@@ -23,8 +24,8 @@ export const QuizService = {
     count: number = 5,
   ): Promise<QuizQuestion[]> {
     const [kps, config] = await Promise.all([
-      Promise.all(
-        knowledgePointIds.map((id) => KnowledgeService.get(userId, id)),
+      kvBatchGet<KnowledgePoint>(
+        knowledgePointIds.map((id) => kvKeys.knowledgePoint(userId, id)),
       ),
       getAIConfig(),
     ]);
@@ -33,8 +34,9 @@ export const QuizService = {
     }
 
     const client = createAIClient(config);
+    const validKps = kps.filter((kp): kp is KnowledgePoint => kp !== null);
     const prompt = buildQuizPrompt(
-      kps.map((kp) => ({ title: kp.title, content: kp.content })),
+      validKps.map((kp) => ({ title: kp.title, content: kp.content })),
       count,
     );
 

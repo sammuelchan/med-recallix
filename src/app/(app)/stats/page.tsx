@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header, PageContainer } from "@/shared/components/layout";
 import { Flame, BookOpen, Brain, Clock, TrendingUp, Trophy, Plus, RotateCcw } from "lucide-react";
+import { cachedFetch } from "@/shared/lib/fetch-cache";
 import type { StreakData } from "@/modules/review";
 import type { DailyEpisode } from "@/modules/agent";
 
@@ -58,13 +59,9 @@ export default function StatsPage() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    fetch("/api/stats")
-      .then((r) => {
-        if (!r.ok) throw new Error("fetch failed");
-        return r.json();
-      })
+    cachedFetch<{ success: boolean; data?: StatsData }>("/api/stats", { ttl: 10_000 })
       .then((json) => {
-        if (json.success) setData(json.data);
+        if (json.success && json.data) setData(json.data);
         else setError(true);
       })
       .catch(() => setError(true));

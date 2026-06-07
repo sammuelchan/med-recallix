@@ -7,6 +7,7 @@ import { PageContainer } from "@/shared/components/layout";
 import { Button } from "@/shared/components/ui/button";
 import { Flame, BarChart3 } from "lucide-react";
 import { AIConfigBanner } from "@/shared/components/ai-config-banner";
+import { cachedFetch } from "@/shared/lib/fetch-cache";
 import type { DueSummary, StreakData } from "@/modules/review";
 
 export default function DashboardPage() {
@@ -14,13 +15,9 @@ export default function DashboardPage() {
   const [streak, setStreak] = useState<StreakData | null>(null);
 
   useEffect(() => {
-    fetch("/api/cards?status=summary")
-      .then((r) => {
-        if (!r.ok) throw new Error("fetch failed");
-        return r.json();
-      })
+    cachedFetch<{ success: boolean; data?: { summary: DueSummary; streak: StreakData } }>("/api/cards?status=summary", { ttl: 10_000 })
       .then((json) => {
-        if (json.success) {
+        if (json.success && json.data) {
           setSummary(json.data.summary);
           setStreak(json.data.streak);
         }

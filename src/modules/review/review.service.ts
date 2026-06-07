@@ -327,4 +327,38 @@ export const ReviewService = {
       kvPut(kvKeys.deckIndex(userId), index),
     ]);
   },
+
+  /** Batch reset multiple cards' due dates to today (single index read/write). */
+  async resetCardsBatch(userId: string, cardIds: string[]): Promise<number> {
+    if (cardIds.length === 0) return 0;
+    const today = toISODateString();
+
+    const [index, cards] = await Promise.all([
+      this.getCardIndex(userId),
+      kvBatchGet<Card>(cardIds.map((id) => kvKeys.card(userId, id))),
+    ]);
+
+    // Update index entries
+    for (const item of index) {
+      if (cardIds.includes(item.id)) {
+        item.dueDate = today;
+      }
+    }
+
+    // Update individual cards and collect write promises
+    const writes: Promise<void>[] = [kvPut(kvKeys.deckIndex(userId), index)];
+    let resetCount = 0;
+
+    for (let i = 0; i < cardIds.length; i++) {
+      const card = cards[i];
+      if (card) {
+        card.dueDate = today;
+        writes.push(kvPut(kvKeys.card(userId, cardIds[i]), card));
+        resetCount++;
+      }
+    }
+
+    await Promise.all(writes);
+    return resetCount;
+  },
 };

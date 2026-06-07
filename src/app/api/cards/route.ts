@@ -89,11 +89,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, data: { reset: 0 } });
     }
 
-    await Promise.all(
-      idsToReset.map((id) => ReviewService.resetCardDueDate(userId, id)),
-    );
-
-    return NextResponse.json({ success: true, data: { reset: idsToReset.length } });
+    const resetCount = await ReviewService.resetCardsBatch(userId, idsToReset);
+    return NextResponse.json({ success: true, data: { reset: resetCount } });
   } catch {
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
   }

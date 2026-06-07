@@ -16,6 +16,7 @@ import { KnowledgeService } from "@/modules/knowledge";
 import { EpisodeService } from "@/modules/agent";
 import { toISODateString } from "@/shared/lib/utils";
 import { getUserId } from "@/shared/lib/get-user-id";
+import { jsonWithCache } from "@/shared/lib/api-response";
 
 export async function GET(req: NextRequest) {
   const userId = await getUserId(req);
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
       minutes: episodes[idx]?.studyMinutes ?? 0,
     }));
 
-    return NextResponse.json({
+    return jsonWithCache({
       success: true,
       data: {
         totalKP,
@@ -80,7 +81,7 @@ export async function GET(req: NextRequest) {
         todayEpisode,
         recentDays,
       },
-    });
+    }, 10);
   } catch {
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
   }

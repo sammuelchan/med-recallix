@@ -116,8 +116,16 @@ function detectProduction(): boolean {
   return isProduction;
 }
 
+/** Cached adapter instances per namespace (avoid recreating on every KV call). */
+const adapterCache = new Map<string, KVAdapter>();
+
 /** Select the appropriate KV adapter for the current runtime environment. */
 function getAdapter(ns: "config" | "data"): KVAdapter {
+  const cached = adapterCache.get(ns);
+  if (cached) return cached;
+
+  let adapter: KVAdapter;
+
   // 1. Production — direct EdgeOne KV binding (available in Edge Functions)
   const binding =
     ns === "config"
@@ -125,16 +133,17 @@ function getAdapter(ns: "config" | "data"): KVAdapter {
       : (globalThis as Record<string, unknown>).MED_DATA;
 
   if (binding) {
-    return wrapEdgeOneKV(binding as EdgeOneKV);
+    adapter = wrapEdgeOneKV(binding as EdgeOneKV);
+  } else if (detectProduction()) {
+    // 2. Production — no binding → proxy via Edge Function HTTP endpoint
+    adapter = createProxyAdapter(ns);
+  } else {
+    // 3. Development — local file system (falls back to in-memory inside kv.local)
+    adapter = getFileKV(ns === "config" ? "med_config" : "med_data");
   }
 
-  // 2. Production — no binding → proxy via Edge Function HTTP endpoint
-  if (detectProduction()) {
-    return createProxyAdapter(ns);
-  }
-
-  // 3. Development — local file system (falls back to in-memory inside kv.local)
-  return getFileKV(ns === "config" ? "med_config" : "med_data");
+  adapterCache.set(ns, adapter);
+  return adapter;
 }
 
 /** Read a JSON value from KV. Returns null if the key does not exist. */

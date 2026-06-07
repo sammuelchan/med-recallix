@@ -15,14 +15,27 @@ export default function KnowledgeDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [kp, setKp] = useState<KnowledgePoint | null>(null);
+  const [recallData, setRecallData] = useState<{
+    cardId: string;
+    interval: number;
+    repetition: number;
+    efactor: number;
+    dueDate: string;
+    lastReviewDate?: string;
+    reviewHistory: unknown[];
+  } | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/knowledge/${id}`)
+    fetch(`/api/knowledge/${id}?include=recall`)
       .then((r) => r.json())
       .then((json) => {
-        if (json.success) setKp(json.data);
+        if (json.success) {
+          const { recall, ...kpData } = json.data;
+          setKp(kpData as KnowledgePoint);
+          setRecallData(recall ?? null);
+        }
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -167,7 +180,20 @@ export default function KnowledgeDetailPage() {
               更新于 {new Date(kp.updatedAt).toLocaleString("zh-CN")}
             </p>
 
-            <ReviewTimeline kpId={id} />
+            <ReviewTimeline
+              kpId={id}
+              preloaded={recallData ? {
+                card: {
+                  id: recallData.cardId,
+                  interval: recallData.interval,
+                  repetition: recallData.repetition,
+                  efactor: recallData.efactor,
+                  dueDate: recallData.dueDate,
+                  lastReviewDate: recallData.lastReviewDate,
+                },
+                reviewHistory: recallData.reviewHistory as import("@/modules/review").ReviewLog[],
+              } : { card: null, reviewHistory: [] }}
+            />
           </div>
         )}
       </PageContainer>

@@ -158,12 +158,29 @@ export default function ReviewPage() {
     });
   }, []);
 
+  // Prefetched KP content map (batch loaded to avoid N+1)
+  const kpCacheRef = useRef<Map<string, KPData>>(new Map());
+
   useEffect(() => {
     fetch("/api/cards")
       .then((r) => r.json())
-      .then((json) => {
+      .then(async (json) => {
         if (json.success && json.data.length > 0) {
           setCards(json.data);
+          // Batch preload KP content for all due cards
+          const ids = [...new Set((json.data as Card[]).map((c) => c.knowledgePointId))];
+          if (ids.length > 0) {
+            try {
+              const kpRes = await fetch(`/api/knowledge?ids=${ids.join(",")}`);
+              const kpJson = await kpRes.json();
+              if (kpJson.success) {
+                const map = kpJson.data as Record<string, KPData>;
+                for (const [id, data] of Object.entries(map)) {
+                  kpCacheRef.current.set(id, data);
+                }
+              }
+            } catch { /* silent - will fallback to individual fetch */ }
+          }
         }
       })
       .finally(() => setLoading(false));
@@ -176,18 +193,27 @@ export default function ReviewPage() {
   const currentCard = cards[currentIdx];
 
   const loadKPData = useCallback(async (kpId: string) => {
+    // Check prefetch cache first (batch loaded, no network needed)
+    const cached = kpCacheRef.current.get(kpId);
+    if (cached) {
+      setKpData(cached);
+      setKpContent(cached.content);
+      return;
+    }
     setLoadingKP(true);
     try {
       const res = await fetch(`/api/knowledge/${kpId}`);
       const json = await res.json();
       if (json.success) {
         const kp: KnowledgePoint = json.data;
-        setKpData({
+        const data: KPData = {
           content: kp.content,
           contentMode: kp.contentMode ?? "text",
           qaItems: kp.qaItems,
-        });
+        };
+        setKpData(data);
         setKpContent(kp.content);
+        kpCacheRef.current.set(kpId, data);
       }
     } catch {
       setKpContent("内容加载失败");
@@ -576,11 +602,12 @@ export default function ReviewPage() {
   }
 
   // --- QA / Fill-blank mode ---
-  const needsLoad = !kpData && !loadingKP && currentCard;
-
-  if (needsLoad) {
-    loadKPData(currentCard.knowledgePointId);
-  }
+  // Load KP data via useEffect to avoid StrictMode double-fire
+  useEffect(() => {
+    if (!kpData && !loadingKP && currentCard) {
+      loadKPData(currentCard.knowledgePointId);
+    }
+  }, [kpData, loadingKP, currentCard, loadKPData]);
 
   const isQAMode = mode === "qa";
   const isFillMode = mode === "fill-blank";

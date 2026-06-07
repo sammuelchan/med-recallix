@@ -25,6 +25,8 @@ export const kvKeys = {
   profile: (userId: string) => `profile_${userId}`,
   memory: (userId: string) => `memory_${userId}`,
   episode: (userId: string, date: string) => `episode_${userId}_${date}`,
+  wrongAnswerIndex: (userId: string) => `wrong_idx_${userId}`,
+  wrongAnswer: (userId: string, wrongId: string) => `wrong_${userId}_${wrongId}`,
 } as const;
 
 /** Global config keys stored in the "config" KV namespace. */

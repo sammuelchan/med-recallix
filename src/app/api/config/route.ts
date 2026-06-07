@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAIConfig, setAIConfig } from "@/shared/infrastructure/ai";
 import { maskApiKey } from "@/shared/lib/validators";
 import { getUserId } from "@/shared/lib/get-user-id";
+import { jsonWithCache } from "@/shared/lib/api-response";
 
 /** GET — return AI config with masked API key. */
 export async function GET(req: NextRequest) {
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const config = await getAIConfig();
-    return NextResponse.json({
+    return jsonWithCache({
       success: true,
       data: {
         baseURL: config.baseURL,
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
         apiKey: config.apiKey ? maskApiKey(config.apiKey) : "",
         hasKey: !!config.apiKey,
       },
-    });
+    }, 30);
   } catch {
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
   }

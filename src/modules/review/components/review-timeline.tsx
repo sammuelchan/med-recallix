@@ -25,19 +25,24 @@ const GRADE_LABELS: Record<number, { text: string; color: string }> = {
   5: { text: "很熟", color: "text-emerald-600" },
 };
 
-export function ReviewTimeline({ kpId }: { kpId: string }) {
-  const [data, setData] = useState<RecallData | null>(null);
-  const [loading, setLoading] = useState(true);
+export function ReviewTimeline({ kpId, preloaded }: { kpId: string; preloaded?: RecallData | null }) {
+  const [data, setData] = useState<RecallData | null>(preloaded ?? null);
+  const [loading, setLoading] = useState(!preloaded);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
+    if (preloaded !== undefined) {
+      setData(preloaded);
+      setLoading(false);
+      return;
+    }
     fetch(`/api/knowledge/${kpId}/recall`)
       .then((r) => r.json())
       .then((json) => {
         if (json.success) setData(json.data);
       })
       .finally(() => setLoading(false));
-  }, [kpId]);
+  }, [kpId, preloaded]);
 
   if (loading) return null;
   if (!data?.card) {

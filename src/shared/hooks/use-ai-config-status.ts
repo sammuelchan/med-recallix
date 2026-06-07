@@ -10,6 +10,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { cachedFetch } from "@/shared/lib/fetch-cache";
 
 interface AIConfigStatus {
   hasKey: boolean;
@@ -24,11 +25,10 @@ export function useAIConfigStatus(): AIConfigStatus {
   });
 
   useEffect(() => {
-    fetch("/api/config")
-      .then((r) => r.json())
+    cachedFetch<{ success: boolean; data?: { hasKey: boolean } }>("/api/config", { ttl: 60_000 })
       .then((json) => {
         if (json.success) {
-          setStatus({ hasKey: !!json.data.hasKey, loading: false });
+          setStatus({ hasKey: !!json.data?.hasKey, loading: false });
         } else {
           setStatus({ hasKey: false, loading: false });
         }

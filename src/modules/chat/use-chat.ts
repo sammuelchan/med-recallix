@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { cachedFetch } from "@/shared/lib/fetch-cache";
 import type { ChatSessionIndex } from "./chat.types";
 
 function friendlyError(raw: string): string {
@@ -49,14 +50,10 @@ export function useChatStream() {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    fetch("/api/profile")
-      .then((r) => {
-        if (!r.ok) throw new Error("fetch failed");
-        return r.json();
-      })
+    cachedFetch<{ success: boolean; data?: { hasProfile: boolean } }>("/api/profile", { ttl: 60_000 })
       .then((json) => {
         if (json.success) {
-          const has = json.data.hasProfile;
+          const has = json.data?.hasProfile ?? true;
           setProfileReady(has);
           if (!has) setIsBootstrap(true);
         } else {

@@ -59,12 +59,17 @@ export const ChatService = {
       createdAt: now,
       lastMessageAt: now,
     };
-    await kvPut(kvKeys.chatSession(userId, id), session);
-    await upsertIndex(userId, {
-      sessionId: id,
-      title: session.title,
-      lastMessageAt: now,
-    });
+
+    // Parallel: persist session + update index
+    await Promise.all([
+      kvPut(kvKeys.chatSession(userId, id), session),
+      upsertIndex(userId, {
+        sessionId: id,
+        title: session.title,
+        lastMessageAt: now,
+      }),
+    ]);
+
     return session;
   },
 
@@ -72,7 +77,7 @@ export const ChatService = {
     userId: string,
     sessionId: string,
     message: ChatMessage,
-  ): Promise<void> {
+  ): Promise<ChatSession> {
     const session = await kvGet<ChatSession>(
       kvKeys.chatSession(userId, sessionId),
     );
@@ -89,12 +94,17 @@ export const ChatService = {
       }
     }
 
-    await kvPut(kvKeys.chatSession(userId, sessionId), session);
-    await upsertIndex(userId, {
-      sessionId,
-      title: session.title,
-      lastMessageAt: session.lastMessageAt,
-    });
+    // Parallel: persist session + update index
+    await Promise.all([
+      kvPut(kvKeys.chatSession(userId, sessionId), session),
+      upsertIndex(userId, {
+        sessionId,
+        title: session.title,
+        lastMessageAt: session.lastMessageAt,
+      }),
+    ]);
+
+    return session;
   },
 
   async listSessions(userId: string): Promise<ChatSessionIndex[]> {
@@ -114,13 +124,12 @@ export const ChatService = {
   },
 
   async deleteSession(userId: string, sessionId: string): Promise<void> {
-    await kvDelete(kvKeys.chatSession(userId, sessionId));
-    const index =
-      (await kvGet<ChatSessionIndex[]>(kvKeys.chatIndex(userId))) ?? [];
-    await kvPut(
-      kvKeys.chatIndex(userId),
-      index.filter((e) => e.sessionId !== sessionId),
-    );
+    const [, index] = await Promise.all([
+      kvDelete(kvKeys.chatSession(userId, sessionId)),
+      kvGet<ChatSessionIndex[]>(kvKeys.chatIndex(userId)),
+    ]);
+    const filtered = (index ?? []).filter((e) => e.sessionId !== sessionId);
+    await kvPut(kvKeys.chatIndex(userId), filtered);
   },
 
   /**
@@ -128,25 +137,32 @@ export const ChatService = {
    * Builds full agent context (soul + profile + memories + episode + history)
    * and returns a Vercel AI SDK streaming response.
    * On finish: saves assistant message, then fires post-reply background tasks.
+   *
+   * Accepts optional preloaded session to avoid redundant KV read.
    */
   async streamReply(
     userId: string,
     sessionId: string,
     _userMessage: string,
+    preloadedSession?: ChatSession,
   ) {
-    const session = await kvGet<ChatSession>(
+    const session = preloadedSession ?? await kvGet<ChatSession>(
       kvKeys.chatSession(userId, sessionId),
     );
     if (!session) throw new NotFoundError("对话");
 
     const history = session.messages;
-    const ctx = await buildAgentContext(
-      userId,
-      history.map((m) => ({ role: m.role, content: m.content })),
-      { summary: session.summary },
-    );
 
-    const config = await getAIConfig();
+    // Parallel: build agent context + get AI config
+    const [ctx, config] = await Promise.all([
+      buildAgentContext(
+        userId,
+        history.map((m) => ({ role: m.role, content: m.content })),
+        { summary: session.summary },
+      ),
+      getAIConfig(),
+    ]);
+
     if (!config.apiKey || config.apiKey === "sk-test-placeholder" || config.apiKey.length < 10) {
       throw new Error("NO_API_KEY");
     }

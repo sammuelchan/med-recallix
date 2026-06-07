@@ -21,6 +21,32 @@ export async function GET(
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const { id } = await params;
+    const include = req.nextUrl.searchParams.get("include");
+
+    if (include === "recall") {
+      const [kp, card] = await Promise.all([
+        KnowledgeService.get(userId, id),
+        ReviewService.getCardByKP(userId, id),
+      ]);
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...kp,
+          recall: card
+            ? {
+                cardId: card.id,
+                interval: card.interval,
+                repetition: card.repetition,
+                efactor: card.efactor,
+                dueDate: card.dueDate,
+                lastReviewDate: card.lastReviewDate,
+                reviewHistory: card.reviewHistory ?? [],
+              }
+            : null,
+        },
+      });
+    }
+
     const kp = await KnowledgeService.get(userId, id);
     return NextResponse.json({ success: true, data: kp });
   } catch (err) {
