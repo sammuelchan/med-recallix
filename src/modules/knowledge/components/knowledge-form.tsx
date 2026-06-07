@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -118,6 +118,7 @@ export function KnowledgeForm({
 }: KnowledgeFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
   const [contentMode, setContentMode] = useState<ContentMode>(
     initialData?.contentMode ?? "text",
   );
@@ -128,6 +129,19 @@ export function KnowledgeForm({
   const [batchText, setBatchText] = useState("");
   const [templateCopied, setTemplateCopied] = useState(false);
   const [showAISheet, setShowAISheet] = useState(false);
+  const [aiContext, setAiContext] = useState({ title: "", category: "" });
+
+  const openAISheet = useCallback(() => {
+    const form = formRef.current;
+    if (form) {
+      const fd = new FormData(form);
+      setAiContext({
+        title: (fd.get("title") as string) ?? "",
+        category: (fd.get("category") as string) ?? "",
+      });
+    }
+    setShowAISheet(true);
+  }, []);
 
   const addQAPair = useCallback(() => {
     setQaItems((prev) => [
@@ -269,7 +283,7 @@ export function KnowledgeForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
       {/* Mode toggle */}
       <div className="flex rounded-lg border p-1 gap-1">
         <button
@@ -448,7 +462,7 @@ export function KnowledgeForm({
             type="button"
             variant="outline"
             className="w-full"
-            onClick={() => setShowAISheet(true)}
+            onClick={openAISheet}
           >
             <Sparkles className="size-4 mr-1.5" />
             AI 补全问答
@@ -463,10 +477,7 @@ export function KnowledgeForm({
         open={showAISheet}
         onOpenChange={setShowAISheet}
         onMerge={handleAIMerge}
-        context={{
-          title: (document.getElementById("title") as HTMLInputElement | null)?.value ?? initialData?.title ?? "",
-          category: (document.getElementById("category") as HTMLInputElement | null)?.value ?? initialData?.category.join("/") ?? "",
-        }}
+        context={aiContext}
       />
     </form>
   );

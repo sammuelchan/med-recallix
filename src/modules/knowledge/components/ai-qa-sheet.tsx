@@ -219,7 +219,7 @@ export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetPro
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={handleClose} />
 
       <div className="relative z-10 flex flex-col bg-background rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[70vh]">
