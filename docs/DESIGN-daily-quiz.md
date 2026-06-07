@@ -32,7 +32,7 @@
 | # | 决策 | 备选 | 选择理由 |
 |---|------|------|----------|
 | ADR-1 | 惰性生成（首次访问触发） | 外部 Cron 预生成 | 无额外依赖；EdgeOne 不支持 Cron |
-| ADR-2 | 分批生成（先10后40） | 一次性生成50题 | 首屏可用时间 < 15s |
+| ADR-2 | COW 分批生成（首批 20 + 异步 COW 补全至 50） | 一次性生成50题 | 首屏可用时间 < 15s；COW 保证答题稳定性 |
 | ADR-3 | Timer 存 localStorage | 服务端推送 | 无 WebSocket；PWA 局限 |
 | ADR-4 | 错题权重存 KV Index | 实时计算 | 避免每次读全量错题数据 |
 | ADR-5 | 复用 QuizService.generate 内核 | 新写 AI 调用 | 避免重复代码，Prompt 微调即可 |
@@ -62,6 +62,8 @@ src/app/
 ├── (app)/
 │   └── daily-quiz/
 │       ├── page.tsx             # 每日练习答题页
+│       ├── audit/
+│       │   └── page.tsx         # 生成审计日志页
 │       └── report/
 │           └── page.tsx         # 答题报告页
 ├── api/
@@ -69,8 +71,12 @@ src/app/
 │       ├── route.ts             # GET: 获取今日题目 / POST: 触发生成
 │       ├── submit/
 │       │   └── route.ts         # POST: 提交单题答案
-│       └── complete/
-│           └── route.ts         # POST: 完成答题，生成报告
+│       ├── complete/
+│       │   └── route.ts         # POST: 完成答题，生成报告
+│       ├── regenerate/
+│       │   └── route.ts         # POST: 换一套题（清除重新生成）
+│       └── audit/
+│           └── route.ts         # GET: 获取生成审计日志
 ```
 
 ### 3.2 依赖关系
@@ -265,6 +271,8 @@ interface CachedQuestion {
 | POST | `/api/daily-quiz` | 触发生成今日题目（如果未生成） |
 | POST | `/api/daily-quiz/submit` | 提交单题答案 |
 | POST | `/api/daily-quiz/complete` | 完成答题，生成报告 |
+| POST | `/api/daily-quiz/regenerate` | 换一套题（清除当日进度并重新生成） |
+| GET | `/api/daily-quiz/audit` | 获取生成审计日志 |
 
 ### 5.2 接口详情
 
@@ -308,8 +316,9 @@ interface CachedQuestion {
 **逻辑：**
 1. 检查 `dq_{userId}_{today}` 是否存在
 2. 存在且 status ≠ "generating" → 直接返回
-3. 不存在 → 创建 set（status: "generating"）→ 生成首批 10 题 → 更新 status: "partial" → 后台继续生成 → 最终 status: "ready"
-4. 由于 Edge 函数无后台线程，采用**同步分批**：首次调用生成 10 题返回 partial，前端轮询 GET 直到 ready
+3. 不存在 → 同步生成首批 20 题（FIRST_BATCH）→ 写入 KV（status: "partial"）→ fire-and-forget 触发 continueGeneration
+4. continueGeneration 使用 **Copy-on-Write**: 读取快照 → 副本上追加新题 → 原子写回 KV
+5. 前端通过 3s 轮询 GET 发现 readyCount 增加时追加题目（append-only，不替换已有题目）
 
 #### POST /api/daily-quiz/submit
 
@@ -396,22 +405,24 @@ sequenceDiagram
         API-->>Page: 需要生成
         Page->>API: POST /api/daily-quiz
         API->>Service: generateDailyQuiz(userId)
-        Service->>Service: calculateWeights(userId)
-        Service->>Service: selectKnowledgePoints()
-        Service->>AI: generateText(prompt, 10题)
-        AI-->>Service: 10 questions
-        Service->>KV: kvPut(dailyQuiz, {status:"partial", 10题})
+        Service->>Service: selectKnowledgePoints() [3层优先级]
+        Service->>AI: generateText(prompt, 首批20题)
+        AI-->>Service: 20 questions (校验后入库)
+        Service->>KV: kvPut(dailyQuiz, {status:"partial", 20题})
         Service-->>API: { status: "partial", quiz }
-        API-->>Page: 展示前10题，可开始答题
+        API-->>Page: 展示前20题，可开始答题
         
-        Note over Page,API: 前端定时轮询 GET
+        Note over Service,KV: COW 异步续生 (fire-and-forget)
+        Service->>KV: 读取快照 [COW: copy]
+        Service->>AI: generateText(prompt, 续批30题)
+        AI-->>Service: 30 questions
+        Service->>Service: snapshot.push(new) [COW: modify copy]
+        Service->>KV: kvPut(完整50题) [COW: atomic write]
+
+        Note over Page,API: 前端 3s 轮询 (append-only)
         Page->>API: GET /api/daily-quiz (轮询)
-        API->>Service: continueGeneration(userId)
-        Service->>AI: generateText(prompt, 剩余40题分2批)
-        AI-->>Service: more questions
-        Service->>KV: kvPut(dailyQuiz, {status:"ready", 50题})
-        Service-->>API: { status: "ready" }
-        API-->>Page: 全部50题就绪
+        API-->>Page: readyCount 增加 → 追加题目(不替换)
+        Page->>Page: lockedRef 保证当前题不变
     end
 ```
 
@@ -537,10 +548,16 @@ interface ReminderState {
   │
   ├── status=null → 触发生成 → loading (骨架屏)
   ├── status=generating → loading (骨架屏 + 倒计时)
-  ├── status=partial → 展示已有题目，可开始答 + 轮询
-  ├── status=ready → 展示全部题目
-  ├── status=in_progress → 从进度恢复
+  ├── status=partial → 展示已有题目(≥20)，可开始答 + 后台轮询追加
+  ├── status=ready → 展示全部题目(50题或降级后的最终数量)
+  ├── status=in_progress → 从 progress.currentIndex 恢复(displayIndex同步)
   └── status=completed → redirect to /daily-quiz/report
+
+答题中状态转换:
+  展示第 N 题 → 用户选答案 → isAnsweringRef=true → submit → 显示反馈
+    → 点"下一题" → lockedRef=null → displayIndex++ → 展示第 N+1 题
+    → 若 N+1 >= readyCount 且 status=partial → 显示等待 UI + 轮询
+    → 若 N+1 >= total 或 (N+1 >= readyCount 且 status=ready) → 完成
 ```
 
 ### 8.3 答题页组件结构
@@ -696,19 +713,59 @@ ${previousQuestion}
 
 | 场景 | 目标 | 方案 |
 |------|------|------|
-| 首批题目生成 | < 15s | 先生成 10 题即返回 |
+| 首批题目生成 | < 15s | 同步生成 20 题即返回，用户可立即开始 |
+| 续批题目生成 | 30s (后台) | COW 异步补全，用户无感知 |
 | 提交答案 | < 500ms | KV 读写 + 内存计算 |
+| 题目切换 | 0ms 无延迟 | lockedQuestionRef 保证题目不跳动 |
 | 冒泡弹出 | < 100ms | 纯客户端 localStorage |
-| 轮询间隔 | 3s | 前端 setInterval + 状态判断停止 |
+| 轮询间隔 | 3s | 答题中暂停轮询 (isAnsweringRef) |
 
 ### 11.2 可靠性
 
 | 故障场景 | 降级方案 |
 |----------|----------|
 | AI 生成失败 | 从 QuizCachePool 抽取历史题目 |
-| AI 部分失败 | 展示已生成的题目（标注"缩减版"） |
+| AI 部分失败 | 展示已生成的题目，答完后自动结束 |
+| AI 返回格式异常 | 严格校验 (answer ∈ options)，丢弃无效题 |
 | KV 写入失败 | 客户端 localStorage 暂存，下次同步 |
 | 进度丢失 | 每题提交时写入，最多丢失 1 题进度 |
+| 续生成期间答题 | COW 保证读者看到稳定快照 |
+
+### 11.3 答题稳定性架构 (防跳题)
+
+采用三层防护保证答题过程中题目卡片不会发生跳动：
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 第 1 层: displayIndex 分离                           │
+│  - displayIndex: 仅用户点"下一题"才递增              │
+│  - currentIndex: 服务端 progress (提交答案后更新)    │
+│  → 提交答案不会改变展示的题目                        │
+├─────────────────────────────────────────────────────┤
+│ 第 2 层: lockedQuestionRef                          │
+│  - 题目展示后锁定在 ref 中                          │
+│  - state.questions 数组变化不影响正在展示的题         │
+│  → 轮询追加新题不影响当前展示                        │
+├─────────────────────────────────────────────────────┤
+│ 第 3 层: isAnsweringRef + 轮询暂停                  │
+│  - 用户选择答案后标记 isAnswering=true               │
+│  - 轮询检测到标记则跳过本轮请求                      │
+│  → 答题过程中完全无外部干扰                          │
+└─────────────────────────────────────────────────────┘
+```
+
+### 11.4 COW (Copy-on-Write) 生成策略
+
+```
+后台续生成期间:
+  1. COPY:  snapshot = [...currentQuestions]   (读取不加锁)
+  2. WRITE: snapshot.push(...newBatch)         (修改副本)
+  3. SWAP:  kvPut(quizSet with snapshot)       (原子替换)
+
+读者(答题用户):
+  - 轮询发现 readyCount 增大时，仅 append 新题到本地数组
+  - 不替换已有题目引用 → 不触发 lockedRef 重新锁定
+```
 
 ### 11.3 安全
 
