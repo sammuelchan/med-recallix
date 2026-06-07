@@ -27,15 +27,28 @@ export async function GET(req: NextRequest) {
     }
 
     if (isSummary) {
-      const [summary, streak, total] = await Promise.all([
-        ReviewService.getDueSummary(userId),
+      const [index, streak] = await Promise.all([
+        ReviewService.getCardIndex(userId),
         ReviewService.getStreak(userId),
-        ReviewService.getCardCount(userId),
       ]);
+
+      const today = new Date().toISOString().slice(0, 10);
+      let due = 0;
+      let overdue = 0;
+      let newToday = 0;
+
+      for (const item of index) {
+        if (item.dueDate <= today) {
+          if (item.repetition === 0) newToday++;
+          else if (item.dueDate < today) overdue++;
+          else due++;
+        }
+      }
+
       return NextResponse.json({
         success: true,
         data: {
-          summary: { ...summary, total },
+          summary: { due, overdue, newToday, completed: 0, total: index.length },
           streak,
         },
       });

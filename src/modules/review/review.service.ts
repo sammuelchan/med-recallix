@@ -1,4 +1,4 @@
-import { kvGet, kvPut, kvDelete, kvKeys } from "@/shared/infrastructure/kv";
+import { kvGet, kvBatchGet, kvPut, kvDelete, kvKeys } from "@/shared/infrastructure/kv";
 import { generateId, toISODateString } from "@/shared/lib/utils";
 import { NotFoundError } from "@/shared/lib/errors";
 import { calculateNextReview, createCard } from "./sm2";
@@ -180,10 +180,9 @@ export const ReviewService = {
 
     if (dueItems.length === 0) return [];
 
-    // Parallel fetch all due card details
-    const cards = await Promise.all(
-      dueItems.map((item) => this.getCard(userId, item.id)),
-    );
+    // Single batch read for all due cards
+    const keys = dueItems.map((item) => kvKeys.card(userId, item.id));
+    const cards = await kvBatchGet<Card>(keys);
 
     return cards.filter((c): c is Card => c !== null);
   },
