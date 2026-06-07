@@ -5,8 +5,9 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { Plus, Trash2, FileText, HelpCircle } from "lucide-react";
+import { Plus, Trash2, FileText, HelpCircle, Copy, Check, Sparkles } from "lucide-react";
 import type { ContentMode, QAPair, BlankPosition } from "../knowledge.types";
+import { AIQASheet } from "./ai-qa-sheet";
 
 interface KnowledgeFormProps {
   initialData?: {
@@ -125,6 +126,8 @@ export function KnowledgeForm({
   );
   const [batchMode, setBatchMode] = useState(false);
   const [batchText, setBatchText] = useState("");
+  const [templateCopied, setTemplateCopied] = useState(false);
+  const [showAISheet, setShowAISheet] = useState(false);
 
   const addQAPair = useCallback(() => {
     setQaItems((prev) => [
@@ -159,6 +162,39 @@ export function KnowledgeForm({
       setBatchText("");
     }
   }, [batchText]);
+
+  const handleCopyTemplate = useCallback(async () => {
+    const count = Math.max(qaItems.length, 3);
+    const lines: string[] = [];
+    for (let i = 1; i <= count; i++) {
+      lines.push(`Q: 问题${i}`);
+      lines.push(`A: 答案${i}`);
+      if (i < count) lines.push("");
+    }
+    const template = lines.join("\n");
+    try {
+      await navigator.clipboard.writeText(template);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = template;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setTemplateCopied(true);
+    setTimeout(() => setTemplateCopied(false), 2000);
+  }, [qaItems.length]);
+
+  const handleAIMerge = useCallback((newPairs: QAPair[]) => {
+    setQaItems((prev) => {
+      const hasContent = prev.some((p) => p.question.trim() || p.answer.trim());
+      return hasContent ? [...prev, ...newPairs] : newPairs;
+    });
+    setContentMode("qa");
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -300,13 +336,26 @@ export function KnowledgeForm({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label>问答对</Label>
-            <button
-              type="button"
-              onClick={() => setBatchMode(!batchMode)}
-              className="text-xs text-primary hover:underline"
-            >
-              {batchMode ? "逐条输入" : "批量输入"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyTemplate}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {templateCopied ? (
+                  <><Check className="size-3 text-green-500" /><span className="text-green-500">已复制</span></>
+                ) : (
+                  <><Copy className="size-3" /><span>复制模板</span></>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBatchMode(!batchMode)}
+                className="text-xs text-primary hover:underline"
+              >
+                {batchMode ? "逐条输入" : "批量输入"}
+              </button>
+            </div>
           </div>
 
           {batchMode ? (
@@ -393,11 +442,32 @@ export function KnowledgeForm({
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <div className="sticky bottom-20 pt-2 pb-2 bg-background/95 backdrop-blur">
+      <div className="sticky bottom-20 pt-2 pb-2 bg-background/95 backdrop-blur space-y-2">
+        {contentMode === "qa" && (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setShowAISheet(true)}
+          >
+            <Sparkles className="size-4 mr-1.5" />
+            AI 补全问答
+          </Button>
+        )}
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "处理中..." : submitLabel}
         </Button>
       </div>
+
+      <AIQASheet
+        open={showAISheet}
+        onOpenChange={setShowAISheet}
+        onMerge={handleAIMerge}
+        context={{
+          title: (document.getElementById("title") as HTMLInputElement | null)?.value ?? initialData?.title ?? "",
+          category: (document.getElementById("category") as HTMLInputElement | null)?.value ?? initialData?.category.join("/") ?? "",
+        }}
+      />
     </form>
   );
 }
