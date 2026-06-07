@@ -60,24 +60,14 @@ function detectQAPairs(text: string): ParsedQA[] {
 }
 
 function buildSystemPrompt(title: string, category: string): string {
-  return `你是一个医学知识助手。用户正在创建知识点，请帮助生成问答对。
+  const ctx = title || category
+    ? `（当前知识点：${category ? category + " / " : ""}${title || "未命名"}）`
+    : "";
+  return ctx;
+}
 
-当前知识点信息：
-- 标题：${title || "（未填写）"}
-- 分类：${category || "（未填写）"}
-
-请严格按照以下格式输出问答对：
-Q: 问题内容
-A: 答案内容
-
-Q: 问题内容
-A: 答案内容
-
-注意事项：
-1. 每个问题和答案独立成行
-2. 答案简明扼要，突出关键知识点
-3. 问题要有针对性，方便记忆测试
-4. 根据用户需求生成合适数量的问答对`;
+function buildMessage(text: string, ctx: string): string {
+  return `${ctx}请按照Q:/A:格式生成问答对。${text}`;
 }
 
 export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetProps) {
@@ -126,11 +116,13 @@ export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetPro
     abortRef.current = controller;
 
     try {
+      const ctx = buildSystemPrompt(context.title, context.category);
+      const fullMessage = buildMessage(text, ctx);
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: `[系统指令]${buildSystemPrompt(context.title, context.category)}\n\n[用户请求]${text}`,
+          message: fullMessage,
           sessionId: "new",
         }),
         signal: controller.signal,
