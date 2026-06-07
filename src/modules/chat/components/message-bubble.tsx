@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { cn } from "@/shared/lib/utils";
-import { Copy, Check, BookPlus, Loader2 } from "lucide-react";
+import { Copy, Check, BookPlus } from "lucide-react";
+import { QAImportDialog } from "./qa-import-dialog";
 
 interface MessageBubbleProps {
   role: "user" | "assistant";
@@ -56,8 +57,7 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   const qaPairs = useMemo(() => {
     if (isUser || isStreaming) return [];
@@ -84,47 +84,6 @@ export function MessageBubble({
       setTimeout(() => setCopied(false), 2000);
     }
   }, [content]);
-
-  const handleImportQA = useCallback(async () => {
-    if (qaPairs.length === 0 || importing) return;
-    setImporting(true);
-    setImportStatus("idle");
-
-    const title = qaPairs[0].question.slice(0, 30) + (qaPairs[0].question.length > 30 ? "..." : "");
-    const qaItems = qaPairs.map((pair, i) => ({
-      id: `qa_${Date.now()}_${i}`,
-      question: pair.question,
-      answer: pair.answer,
-    }));
-
-    try {
-      const res = await fetch("/api/knowledge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          contentMode: "qa",
-          content: "",
-          qaItems,
-          category: ["对话导入"],
-          tags: ["AI生成"],
-        }),
-      });
-
-      if (res.ok) {
-        setImportStatus("success");
-        setTimeout(() => setImportStatus("idle"), 3000);
-      } else {
-        setImportStatus("error");
-        setTimeout(() => setImportStatus("idle"), 3000);
-      }
-    } catch {
-      setImportStatus("error");
-      setTimeout(() => setImportStatus("idle"), 3000);
-    } finally {
-      setImporting(false);
-    }
-  }, [qaPairs, importing]);
 
   return (
     <div
@@ -175,35 +134,11 @@ export function MessageBubble({
 
             {hasQA && (
               <button
-                onClick={handleImportQA}
-                disabled={importing}
-                className={cn(
-                  "flex items-center gap-1 rounded-md px-2 py-0.5 text-xs transition-colors",
-                  importStatus === "success"
-                    ? "text-green-500"
-                    : importStatus === "error"
-                      ? "text-destructive"
-                      : "text-muted-foreground hover:text-primary hover:bg-primary/10",
-                )}
+                onClick={() => setShowImportDialog(true)}
+                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
               >
-                {importing ? (
-                  <>
-                    <Loader2 className="size-3 animate-spin" />
-                    <span>导入中...</span>
-                  </>
-                ) : importStatus === "success" ? (
-                  <>
-                    <Check className="size-3" />
-                    <span>已导入 {qaPairs.length} 对</span>
-                  </>
-                ) : importStatus === "error" ? (
-                  <span>导入失败</span>
-                ) : (
-                  <>
-                    <BookPlus className="size-3" />
-                    <span>导入知识点 ({qaPairs.length}对)</span>
-                  </>
-                )}
+                <BookPlus className="size-3" />
+                <span>导入知识点 ({qaPairs.length}对)</span>
               </button>
             )}
           </div>
@@ -214,6 +149,14 @@ export function MessageBubble({
         <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
           👤
         </div>
+      )}
+
+      {hasQA && (
+        <QAImportDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+          qaPairs={qaPairs}
+        />
       )}
     </div>
   );
