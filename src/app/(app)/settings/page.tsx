@@ -7,7 +7,8 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { useAuth } from "@/modules/auth/use-auth";
-import { Check } from "lucide-react";
+import { invalidateAll } from "@/shared/lib/fetch-cache";
+import { Check, RefreshCw } from "lucide-react";
 
 export default function SettingsPage() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -132,6 +133,37 @@ export default function SettingsPage() {
                 </Button>
               </form>
             )}
+          </section>
+
+          <section className="rounded-xl border p-4">
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">
+              缓存管理
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              如果页面显示异常（如功能入口消失、内容未更新），可尝试清除缓存后重新加载。
+            </p>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={async () => {
+                invalidateAll();
+
+                if ("caches" in window) {
+                  const keys = await caches.keys();
+                  await Promise.all(keys.map((k) => caches.delete(k)));
+                }
+
+                if ("serviceWorker" in navigator) {
+                  const regs = await navigator.serviceWorker.getRegistrations();
+                  await Promise.all(regs.map((r) => r.unregister()));
+                }
+
+                window.location.reload();
+              }}
+            >
+              <RefreshCw className="size-4 mr-2" />
+              清除缓存并重新加载
+            </Button>
           </section>
 
           <Button variant="destructive" className="w-full" onClick={logout}>
