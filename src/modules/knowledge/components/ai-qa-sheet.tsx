@@ -61,13 +61,13 @@ function detectQAPairs(text: string): ParsedQA[] {
 
 function buildSystemPrompt(title: string, category: string): string {
   const ctx = title || category
-    ? `（当前知识点：${category ? category + " / " : ""}${title || "未命名"}）`
+    ? `（知识点：${category ? category + "/" : ""}${title || "未命名"}）`
     : "";
   return ctx;
 }
 
 function buildMessage(text: string, ctx: string): string {
-  return `${ctx}请按照Q:/A:格式生成问答对。${text}`;
+  return `${ctx}用Q:/A:格式，答案一句话精简。${text}`;
 }
 
 export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetProps) {
@@ -234,9 +234,9 @@ export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetPro
         <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3">
           {messages.length === 0 && (
             <div className="text-center py-8 text-sm text-muted-foreground space-y-2">
-              <p>告诉 AI 你想生成什么问答</p>
+              <p>AI 帮你快速生成问答对</p>
               <div className="flex flex-wrap gap-1.5 justify-center">
-                {["帮我生成5个核心问答", "围绕关键概念出题", "针对易混淆点出填空题"].map((s) => (
+                {["生成5个核心问答", "出3道易错题", "生成填空题"].map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -266,6 +266,23 @@ export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetPro
               </div>
             </div>
           ))}
+
+          {/* Expand suggestions after AI responds */}
+          {detectedPairs.length > 0 && !isStreaming && (
+            <div className="flex flex-wrap gap-1.5 justify-center pt-1">
+              {["扩展答案详情", "再来5个", "换个角度出题"].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setInput(s)}
+                  className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
