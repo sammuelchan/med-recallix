@@ -8,6 +8,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Flame, BarChart3 } from "lucide-react";
 import { AIConfigBanner } from "@/shared/components/ai-config-banner";
 import { cachedFetch } from "@/shared/lib/fetch-cache";
+import { DailyQuizCard } from "@/modules/daily-quiz/components/DailyQuizCard";
 import type { DueSummary, StreakData } from "@/modules/review";
 
 export default function DashboardPage() {
@@ -122,6 +123,8 @@ export default function DashboardPage() {
             </div>
             <span className="text-muted-foreground">›</span>
           </Link>
+
+          <DailyQuizCard />
         </div>
       </PageContainer>
     </>

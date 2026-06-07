@@ -14,9 +14,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
 import { KnowledgeService } from "@/modules/knowledge";
 import { EpisodeService } from "@/modules/agent";
+import { DailyQuizService } from "@/modules/daily-quiz";
 import { toISODateString } from "@/shared/lib/utils";
 import { getUserId } from "@/shared/lib/get-user-id";
 import { jsonWithCache } from "@/shared/lib/api-response";
+import { kvGet, kvKeys } from "@/shared/infrastructure/kv";
+import type { DailyQuizResult } from "@/modules/daily-quiz";
 
 export async function GET(req: NextRequest) {
   const userId = await getUserId(req);
@@ -33,12 +36,13 @@ export async function GET(req: NextRequest) {
     }
     const today = dates[dates.length - 1];
 
-    // All KV reads in parallel: index + kp-index + streak + episodes
-    const [cardIndex, kpIndex, streak, episodes] = await Promise.all([
+    // All KV reads in parallel: index + kp-index + streak + episodes + daily quiz results
+    const [cardIndex, kpIndex, streak, episodes, ...quizResults] = await Promise.all([
       ReviewService.getCardIndex(userId),
       KnowledgeService.getIndex(userId),
       ReviewService.getStreak(userId),
       EpisodeService.getEpisodes(userId, dates),
+      ...dates.map((d) => kvGet<DailyQuizResult>(kvKeys.dailyQuizResult(userId, d))),
     ]);
 
     const totalKP = kpIndex.length;
@@ -67,6 +71,19 @@ export async function GET(req: NextRequest) {
       minutes: episodes[idx]?.studyMinutes ?? 0,
     }));
 
+    const dailyQuizStats = {
+      recentResults: dates.map((date, idx) => ({
+        date,
+        accuracy: quizResults[idx]?.accuracy ?? null,
+        completed: quizResults[idx] != null,
+      })),
+      streak: quizResults.filter((r) => r != null).length > 0
+        ? await DailyQuizService.calculateStreak(userId, today)
+        : 0,
+      todayCompleted: quizResults[quizResults.length - 1] != null,
+      todayAccuracy: quizResults[quizResults.length - 1]?.accuracy ?? null,
+    };
+
     return jsonWithCache({
       success: true,
       data: {
@@ -80,6 +97,7 @@ export async function GET(req: NextRequest) {
         streak,
         todayEpisode,
         recentDays,
+        dailyQuizStats,
       },
     }, 10);
   } catch {

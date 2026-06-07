@@ -19,6 +19,12 @@ interface StatsData {
   streak: StreakData;
   todayEpisode: DailyEpisode | null;
   recentDays: { date: string; count: number; minutes: number }[];
+  dailyQuizStats?: {
+    recentResults: { date: string; accuracy: number | null; completed: boolean }[];
+    streak: number;
+    todayCompleted: boolean;
+    todayAccuracy: number | null;
+  };
 }
 
 function gradeLabel(count: number): string {
@@ -246,6 +252,48 @@ export default function StatsPage() {
             </p>
             <p className="text-xs text-muted-foreground mt-1">累计复习次数</p>
           </div>
+
+          {/* Daily Quiz Stats */}
+          {data.dailyQuizStats && (
+            <div className="rounded-2xl border p-4">
+              <h3 className="mb-3 text-sm font-medium text-muted-foreground">每日练习</h3>
+              <div className="mb-3 flex items-center gap-4">
+                {data.dailyQuizStats.streak > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <Flame className="size-4 text-orange-500" />
+                    <span className="text-sm font-medium">连续 {data.dailyQuizStats.streak} 天</span>
+                  </div>
+                )}
+                {data.dailyQuizStats.todayCompleted && (
+                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                    今日已完成 {data.dailyQuizStats.todayAccuracy}%
+                  </span>
+                )}
+                {!data.dailyQuizStats.todayCompleted && (
+                  <Link href="/daily-quiz" className="text-xs text-blue-500 hover:underline">
+                    去做题 →
+                  </Link>
+                )}
+              </div>
+              <div className="flex items-end gap-1">
+                {data.dailyQuizStats.recentResults.map((day: { date: string; accuracy: number | null; completed: boolean }) => (
+                  <div key={day.date} className="flex flex-1 flex-col items-center gap-1">
+                    <div className="relative h-16 w-full">
+                      <div
+                        className={`absolute bottom-0 w-full rounded-sm transition-all ${
+                          day.completed ? "bg-blue-400" : "bg-gray-200"
+                        }`}
+                        style={{ height: day.accuracy != null ? `${day.accuracy}%` : "8%" }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      {day.date.slice(5)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </PageContainer>
     </>
