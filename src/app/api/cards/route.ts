@@ -21,10 +21,16 @@ export async function GET(req: NextRequest) {
       req.nextUrl.searchParams.get("summary") === "true";
 
     const isStreak = req.nextUrl.searchParams.get("streak") === "true";
+    const isAll = req.nextUrl.searchParams.get("all") === "true";
 
     if (isStreak) {
       const streak = await ReviewService.getStreak(userId);
       return NextResponse.json({ success: true, data: streak });
+    }
+
+    if (isAll) {
+      const index = await ReviewService.getCardIndex(userId);
+      return NextResponse.json({ success: true, data: index });
     }
 
     if (isSummary) {

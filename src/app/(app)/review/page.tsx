@@ -14,8 +14,9 @@ import {
   BookOpen,
   CreditCard,
   PenLine,
+  ListChecks,
 } from "lucide-react";
-import type { Card, ReviewGrade } from "@/modules/review";
+import type { Card, ReviewGrade, CardIndexItem } from "@/modules/review";
 import type { KnowledgePoint, QAPair } from "@/modules/knowledge";
 
 type ReviewDisplayMode = "qa" | "fill-blank" | "card";
@@ -97,6 +98,41 @@ export default function ReviewPage() {
 
   // Reset state
   const [resetting, setResetting] = useState(false);
+  const [showCardPicker, setShowCardPicker] = useState(false);
+  const [allCards, setAllCards] = useState<CardIndexItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [loadingCards, setLoadingCards] = useState(false);
+
+  const openCardPicker = useCallback(async () => {
+    setLoadingCards(true);
+    setShowCardPicker(true);
+    try {
+      const res = await fetch("/api/cards?all=true");
+      const json = await res.json();
+      if (json.success) {
+        const today = new Date().toISOString().slice(0, 10);
+        const notDue = (json.data as CardIndexItem[]).filter((c) => c.dueDate > today);
+        setAllCards(notDue);
+        setSelectedIds(new Set(notDue.map((c) => c.id)));
+      }
+    } catch { /* silent */ }
+    setLoadingCards(false);
+  }, []);
+
+  const handleResetSelected = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setResetting(true);
+    try {
+      await fetch("/api/cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardIds: Array.from(selectedIds) }),
+      });
+      window.location.reload();
+    } catch {
+      setResetting(false);
+    }
+  }, [selectedIds]);
 
   const handleResetAllToday = useCallback(async () => {
     setResetting(true);
@@ -112,6 +148,15 @@ export default function ReviewPage() {
       setResetting(false);
     }
   }, [cards]);
+
+  const toggleCardSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     fetch("/api/cards")
@@ -249,7 +294,7 @@ export default function ReviewPage() {
   }
 
   // --- Empty state ---
-  if (cards.length === 0) {
+  if (cards.length === 0 && !showCardPicker) {
     return (
       <>
         <Header title="复习" />
@@ -258,15 +303,25 @@ export default function ReviewPage() {
             <p className="text-4xl mb-4">📚</p>
             <p>暂无待复习的卡片</p>
             <p className="text-sm mt-1">先去添加知识点吧</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleResetAllToday}
-              disabled={resetting}
-            >
-              <RotateCcw className="size-3.5 mr-1" />
-              {resetting ? "重置中..." : "重新复习今天的卡片"}
-            </Button>
+            <div className="flex flex-col gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetAllToday}
+                disabled={resetting}
+              >
+                <RotateCcw className="size-3.5 mr-1" />
+                {resetting ? "重置中..." : "全部重新复习"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={openCardPicker}
+              >
+                <ListChecks className="size-3.5 mr-1" />
+                选择卡片复习
+              </Button>
+            </div>
           </div>
         </PageContainer>
       </>
@@ -274,7 +329,7 @@ export default function ReviewPage() {
   }
 
   // --- Done state ---
-  if (done) {
+  if (done && !showCardPicker) {
     return (
       <>
         <Header title="复习完成" />
@@ -295,9 +350,112 @@ export default function ReviewPage() {
                 disabled={resetting}
               >
                 <RotateCcw className="size-4 mr-1.5" />
-                {resetting ? "重置中..." : "再来一轮"}
+                {resetting ? "重置中..." : "再来一轮（全部）"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={openCardPicker}
+              >
+                <ListChecks className="size-4 mr-1.5" />
+                选择卡片重新复习
               </Button>
             </div>
+          </div>
+        </PageContainer>
+      </>
+    );
+  }
+
+  // --- Card Picker state ---
+  if (showCardPicker) {
+    return (
+      <>
+        <Header title="选择复习卡片" />
+        <PageContainer>
+          <div className="space-y-4">
+            {loadingCards ? (
+              <div className="flex justify-center py-8">
+                <div className="size-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
+              </div>
+            ) : allCards.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>没有可以重新复习的卡片</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => setShowCardPicker(false)}
+                >
+                  返回
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    已选 {selectedIds.size} / {allCards.length} 张
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIds(new Set(allCards.map((c) => c.id)))}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      全选
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIds(new Set())}
+                      className="text-xs text-muted-foreground hover:underline"
+                    >
+                      清空
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {allCards.map((card) => (
+                    <label
+                      key={card.id}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                        selectedIds.has(card.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(card.id)}
+                        onChange={() => toggleCardSelection(card.id)}
+                        className="size-4 rounded border-muted-foreground accent-primary"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{card.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          下次复习: {card.dueDate} · 已复习 {card.repetition} 轮
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="ghost"
+                    className="flex-1"
+                    onClick={() => setShowCardPicker(false)}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={handleResetSelected}
+                    disabled={selectedIds.size === 0 || resetting}
+                  >
+                    {resetting ? "重置中..." : `开始复习 (${selectedIds.size}张)`}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </PageContainer>
       </>
