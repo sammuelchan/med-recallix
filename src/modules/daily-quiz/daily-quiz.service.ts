@@ -538,12 +538,25 @@ export const DailyQuizService = {
 
       for (let i = 0; i < raw.length; i++) {
         const q = raw[i];
+        // 基础字段校验
         if (!q.stem || !q.options || !q.answer || !q.explanation) continue;
         if (!validLabels.has(q.answer)) continue;
+        if (q.options.length < 4) continue;
 
+        // 答案标签必须在选项中
         const optionLabels = new Set(q.options.map((o) => o.label));
         if (!optionLabels.has(q.answer)) continue;
-        if (q.options.length < 4) continue;
+
+        // 选项内容质量校验
+        const optionTexts = q.options.map((o) => o.text?.trim()).filter(Boolean);
+        if (optionTexts.length < 4) continue;
+        // 选项不能太短（<2字）或存在重复
+        if (optionTexts.some((t) => t.length < 2)) continue;
+        const uniqueTexts = new Set(optionTexts);
+        if (uniqueTexts.size < optionTexts.length) continue;
+
+        // 题干不能太短（至少10字的完整句子）
+        if (q.stem.trim().length < 10) continue;
 
         const kp = validKps[i % validKps.length];
         let sourceType: DailyQuizQuestion["sourceType"] = "new_coverage";
@@ -576,8 +589,14 @@ export const DailyQuizService = {
   },
 
   /**
-   * Convert QA pairs from knowledge points into MCQ format.
-   * Uses the answer as correct option and generates distractors from other QA pairs.
+   * 从知识点内置 QA 对转为选择题格式。
+   *
+   * 核心策略:
+   * - 正确答案来自 QA 对的 answer 字段
+   * - 干扰项优先从**同一知识点**的其他 QA 答案中选取（同领域保证）
+   * - 次优先从**同分类**的其他 KP 的 QA 答案中选取
+   * - 最后才从所有 QA 答案中兜底（仍比随机 KP 标题好）
+   * - 生成的 explanation 包含答案分析
    */
   extractQAQuestions(
     kps: KnowledgePoint[],
@@ -599,21 +618,32 @@ export const DailyQuizService = {
 
     if (allQAs.length === 0) return [];
 
-    // Shuffle for variety
     const shuffled = allQAs.sort(() => Math.random() - 0.5).slice(0, maxCount);
 
-    // Collect all answers as a distractor pool
-    const allAnswers = allQAs.map((item) => item.qa.answer);
+    // Pre-build distractor pools by KP and by category for semantic relevance
+    const answersByKpId = new Map<string, string[]>();
+    const answersByCategory = new Map<string, string[]>();
+    for (const item of allQAs) {
+      const kpAnswers = answersByKpId.get(item.kp.id) ?? [];
+      kpAnswers.push(item.qa.answer);
+      answersByKpId.set(item.kp.id, kpAnswers);
+
+      const cats = item.kp.category ?? [];
+      for (const cat of cats) {
+        const catAnswers = answersByCategory.get(cat) ?? [];
+        catAnswers.push(item.qa.answer);
+        answersByCategory.set(cat, catAnswers);
+      }
+    }
 
     return shuffled.map((item) => {
       const { kp, qa } = item;
-      const distractors = this.pickDistractors(qa.answer, allAnswers, kps);
+      const distractors = this.pickDistractors(qa.answer, kp, answersByKpId, answersByCategory, allQAs);
       const options = [
         { label: "A", text: qa.answer },
         ...distractors.map((d, i) => ({ label: String.fromCharCode(66 + i), text: d })),
       ];
 
-      // Shuffle options then re-label A-E sequentially
       const shuffledOptions = options.sort(() => Math.random() - 0.5);
       const relabeled = shuffledOptions.map((o, i) => ({
         label: String.fromCharCode(65 + i),
@@ -630,7 +660,7 @@ export const DailyQuizService = {
         stem: qa.question,
         options: relabeled,
         answer: finalAnswer,
-        explanation: `正确答案：${qa.answer}`,
+        explanation: `【答案分析】正确答案为${finalAnswer}（${qa.answer}）。本题考查知识点「${kp.title}」。`,
         sourceKpId: kp.id,
         sourceType,
       };
@@ -638,39 +668,62 @@ export const DailyQuizService = {
   },
 
   /**
-   * Pick 4 distractor options that are different from the correct answer.
-   * Draws from other QA answers first, then generates simple variations.
+   * 选取 4 个干扰项。按语义相关度分层:
+   *
+   * 1. 同一知识点的其他 QA 答案（最佳，同一概念不同细节）
+   * 2. 同分类知识点的 QA 答案（次优，同领域同维度）
+   * 3. 所有 QA 答案（兜底，至少都是医学概念）
+   *
+   * 严禁使用 KP 标题或通用 filler（如"以上都不是"）作为干扰项
    */
-  pickDistractors(correct: string, allAnswers: string[], kps: KnowledgePoint[]): string[] {
-    const pool = new Set<string>();
-
-    // Add other QA answers as distractors
-    for (const ans of allAnswers) {
-      if (ans !== correct && ans.length > 0) pool.add(ans);
-    }
-
-    // Add KP titles as additional distractor source
-    for (const kp of kps) {
-      if (kp.title !== correct) pool.add(kp.title);
-    }
-
-    const candidates = [...pool].sort(() => Math.random() - 0.5);
-
-    // Need exactly 4 distractors for A-E options
+  pickDistractors(
+    correct: string,
+    sourceKp: KnowledgePoint,
+    answersByKpId: Map<string, string[]>,
+    answersByCategory: Map<string, string[]>,
+    allQAs: { kp: KnowledgePoint; qa: { question: string; answer: string } }[],
+  ): string[] {
+    const used = new Set<string>([correct]);
     const result: string[] = [];
-    for (const c of candidates) {
-      if (result.length >= 4) break;
-      result.push(c);
+
+    const addFromPool = (pool: string[]) => {
+      const shuffled = [...pool].sort(() => Math.random() - 0.5);
+      for (const item of shuffled) {
+        if (result.length >= 4) return;
+        if (!used.has(item) && item.length > 0) {
+          used.add(item);
+          result.push(item);
+        }
+      }
+    };
+
+    // Layer 1: same KP's other QA answers
+    const sameKpAnswers = answersByKpId.get(sourceKp.id) ?? [];
+    addFromPool(sameKpAnswers);
+
+    // Layer 2: same category KP's QA answers
+    if (result.length < 4) {
+      const categories = sourceKp.category ?? [];
+      for (const cat of categories) {
+        if (result.length >= 4) break;
+        const catAnswers = answersByCategory.get(cat) ?? [];
+        addFromPool(catAnswers);
+      }
     }
 
-    // If not enough distractors, pad with generic fillers
-    const fillers = ["以上都不是", "以上均正确", "无法确定", "需要进一步检查"];
-    let fillerIdx = 0;
-    while (result.length < 4 && fillerIdx < fillers.length) {
-      if (fillers[fillerIdx] !== correct) {
-        result.push(fillers[fillerIdx]);
-      }
-      fillerIdx++;
+    // Layer 3: all QA answers (still medical concepts, better than random titles)
+    if (result.length < 4) {
+      const allAnswers = allQAs.map((item) => item.qa.answer);
+      addFromPool(allAnswers);
+    }
+
+    // Layer 4 (absolute fallback): use content fragments from same KP
+    if (result.length < 4 && sourceKp.content) {
+      const sentences = sourceKp.content
+        .split(/[。；\n]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length >= 4 && s.length <= 30 && s !== correct);
+      addFromPool(sentences);
     }
 
     return result.slice(0, 4);
