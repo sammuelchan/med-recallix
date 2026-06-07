@@ -9,7 +9,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { KnowledgeForm } from "@/modules/knowledge/components/knowledge-form";
 import { Pencil, Trash2, ArrowLeft } from "lucide-react";
 import { ReviewTimeline } from "@/modules/review/components/review-timeline";
-import type { KnowledgePoint } from "@/modules/knowledge";
+import type { KnowledgePoint, ContentMode, QAPair } from "@/modules/knowledge";
 
 export default function KnowledgeDetailPage() {
   const router = useRouter();
@@ -30,6 +30,8 @@ export default function KnowledgeDetailPage() {
   async function handleUpdate(data: {
     title: string;
     content: string;
+    contentMode: ContentMode;
+    qaItems?: QAPair[];
     category: string[];
     tags: string[];
   }) {
@@ -124,19 +126,43 @@ export default function KnowledgeDetailPage() {
               <p className="text-sm text-muted-foreground">
                 {kp.category.join(" / ")}
               </p>
-              {kp.tags.length > 0 && (
-                <div className="flex gap-1 mt-2 flex-wrap">
-                  {kp.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              )}
+              <div className="flex gap-1 mt-2 flex-wrap">
+                {kp.contentMode === "qa" && (
+                  <Badge variant="outline">问答式</Badge>
+                )}
+                {kp.tags.map((tag) => (
+                  <Badge key={tag} variant="secondary">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
             </div>
-            <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
-              {kp.content}
-            </div>
+
+            {kp.contentMode === "qa" && kp.qaItems && kp.qaItems.length > 0 ? (
+              <div className="space-y-3">
+                {kp.qaItems.map((qa, idx) => (
+                  <div key={qa.id} className="rounded-lg border p-3 space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Q{idx + 1}
+                    </p>
+                    <p className="text-sm font-medium">{qa.question}</p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                      {qa.answer}
+                    </p>
+                    {qa.blanks && qa.blanks.length > 0 && (
+                      <p className="text-xs text-primary/70">
+                        {qa.blanks.length} 个填空点
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
+                {kp.content}
+              </div>
+            )}
+
             <p className="text-xs text-muted-foreground">
               更新于 {new Date(kp.updatedAt).toLocaleString("zh-CN")}
             </p>

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/shared/components/layout";
 import { PageContainer } from "@/shared/components/layout";
 import { KnowledgeForm } from "@/modules/knowledge/components/knowledge-form";
+import type { ContentMode, QAPair } from "@/modules/knowledge";
 
 export default function NewKnowledgePage() {
   const router = useRouter();
@@ -11,6 +12,8 @@ export default function NewKnowledgePage() {
   async function handleSubmit(data: {
     title: string;
     content: string;
+    contentMode: ContentMode;
+    qaItems?: QAPair[];
     category: string[];
     tags: string[];
     addToReview?: boolean;

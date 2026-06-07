@@ -41,6 +41,11 @@ export async function PUT(
     const body = await req.json();
     const input = UpdateKPSchema.parse(body);
     const kp = await KnowledgeService.update(userId, id, input);
+
+    if (input.title || input.category) {
+      ReviewService.syncCardTitle(userId, id, kp.displayTitle).catch(() => {});
+    }
+
     return NextResponse.json({ success: true, data: kp });
   } catch (err) {
     if (err instanceof AppError) return NextResponse.json(err.toJSON(), { status: err.status });

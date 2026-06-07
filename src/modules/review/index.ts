@@ -9,4 +9,7 @@ export type {
   DueSummary,
   ReviewGrade,
   ReviewLog,
+  ReviewMode,
+  QAReviewState,
+  CardIndexItem,
 } from "./review.types";

@@ -1,32 +1,73 @@
-import { kvGet, kvPut, kvKeys } from "@/shared/infrastructure/kv";
+import { kvGet, kvPut, kvDelete, kvKeys } from "@/shared/infrastructure/kv";
 import { generateId, toISODateString } from "@/shared/lib/utils";
 import { NotFoundError } from "@/shared/lib/errors";
-import { calculateNextReview, createCard, isDue } from "./sm2";
+import { calculateNextReview, createCard } from "./sm2";
 import { EpisodeService } from "@/modules/agent";
-import type { Card, Deck, StreakData, DueSummary, ReviewGrade } from "./review.types";
+import type {
+  Card,
+  Deck,
+  CardIndexItem,
+  StreakData,
+  DueSummary,
+  ReviewGrade,
+} from "./review.types";
 
 /**
- * Review Service — spaced repetition deck management
+ * Review Service — spaced repetition deck management (sharded storage)
  *
- * Manages the user's review deck (stored as a single KV entry per user):
- *   - addCard: link a knowledge point to a review card
- *   - reviewCard: grade a card (SM-2) and record history
- *   - getDueCards / getDueSummary: find cards ready for review
- *   - updateStreak: track consecutive study days
+ * Storage layout:
+ *   deck_idx_{userId}  → CardIndexItem[] (lightweight, for due queries)
+ *   card_{userId}_{id} → Card (full SM-2 state + review history)
+ *   streak_{userId}    → StreakData
  *
- * Side effects after each review:
- *   - Updates the user's study streak
- *   - Records the review in today's DailyEpisode (agent memory)
+ * Migration: on first access, if old monolithic `deck_{userId}` exists,
+ * it is split into individual card records + index, then the old key is deleted.
  */
 export const ReviewService = {
-  async getDeck(userId: string): Promise<Deck> {
-    return (
-      (await kvGet<Deck>(kvKeys.deck(userId))) ?? {
-        userId,
-        cards: [],
-        updatedAt: new Date().toISOString(),
-      }
-    );
+  async getCardIndex(userId: string): Promise<CardIndexItem[]> {
+    const index = await kvGet<CardIndexItem[]>(kvKeys.deckIndex(userId));
+    if (index) return index;
+
+    // Migration: check for old monolithic deck
+    const oldDeck = await kvGet<Deck>(kvKeys.deck(userId));
+    if (oldDeck && oldDeck.cards.length > 0) {
+      return this.migrateFromMonolithicDeck(userId, oldDeck);
+    }
+
+    return [];
+  },
+
+  async migrateFromMonolithicDeck(
+    userId: string,
+    oldDeck: Deck,
+  ): Promise<CardIndexItem[]> {
+    const index: CardIndexItem[] = [];
+    const writes: Promise<void>[] = [];
+
+    for (const card of oldDeck.cards) {
+      index.push({
+        id: card.id,
+        knowledgePointId: card.knowledgePointId,
+        title: card.title,
+        dueDate: card.dueDate,
+        repetition: card.repetition,
+        interval: card.interval,
+        efactor: card.efactor,
+      });
+      writes.push(kvPut(kvKeys.card(userId, card.id), card));
+    }
+
+    writes.push(kvPut(kvKeys.deckIndex(userId), index));
+    await Promise.all(writes);
+
+    // Clean up old monolithic key (fire-and-forget)
+    kvDelete(kvKeys.deck(userId)).catch(() => {});
+
+    return index;
+  },
+
+  async getCard(userId: string, cardId: string): Promise<Card | null> {
+    return kvGet<Card>(kvKeys.card(userId, cardId));
   },
 
   async addCard(
@@ -34,16 +75,32 @@ export const ReviewService = {
     knowledgePointId: string,
     title: string,
   ): Promise<Card> {
-    const deck = await this.getDeck(userId);
-    const existing = deck.cards.find(
-      (c) => c.knowledgePointId === knowledgePointId,
-    );
-    if (existing) return existing;
+    const index = await this.getCardIndex(userId);
+    const existing = index.find((c) => c.knowledgePointId === knowledgePointId);
+    if (existing) {
+      const card = await this.getCard(userId, existing.id);
+      return card!;
+    }
 
     const card = createCard(knowledgePointId, title, generateId());
-    deck.cards.push(card);
-    deck.updatedAt = new Date().toISOString();
-    await kvPut(kvKeys.deck(userId), deck);
+    const indexItem: CardIndexItem = {
+      id: card.id,
+      knowledgePointId: card.knowledgePointId,
+      title: card.title,
+      dueDate: card.dueDate,
+      repetition: card.repetition,
+      interval: card.interval,
+      efactor: card.efactor,
+    };
+
+    index.push(indexItem);
+
+    // Parallel: write card + update index
+    await Promise.all([
+      kvPut(kvKeys.card(userId, card.id), card),
+      kvPut(kvKeys.deckIndex(userId), index),
+    ]);
+
     return card;
   },
 
@@ -52,11 +109,16 @@ export const ReviewService = {
     cardId: string,
     grade: ReviewGrade,
   ): Promise<Card> {
-    const deck = await this.getDeck(userId);
-    const idx = deck.cards.findIndex((c) => c.id === cardId);
-    if (idx < 0) throw new NotFoundError("卡片");
+    // Parallel read: card + index + streak
+    const [card, index, streak] = await Promise.all([
+      this.getCard(userId, cardId),
+      this.getCardIndex(userId),
+      this.getStreak(userId),
+    ]);
 
-    const updated = calculateNextReview(deck.cards[idx], grade);
+    if (!card) throw new NotFoundError("卡片");
+
+    const updated = calculateNextReview(card, grade);
     if (!updated.reviewHistory) updated.reviewHistory = [];
     updated.reviewHistory.push({
       date: toISODateString(),
@@ -67,34 +129,77 @@ export const ReviewService = {
     if (updated.reviewHistory.length > 50) {
       updated.reviewHistory = updated.reviewHistory.slice(-50);
     }
-    deck.cards[idx] = updated;
-    deck.updatedAt = new Date().toISOString();
+
+    // Update index entry
+    const idx = index.findIndex((c) => c.id === cardId);
+    if (idx >= 0) {
+      index[idx] = {
+        ...index[idx],
+        dueDate: updated.dueDate,
+        repetition: updated.repetition,
+        interval: updated.interval,
+        efactor: updated.efactor,
+      };
+    }
+
+    // Update streak inline
+    const today = toISODateString();
+    if (streak.lastStudyDate !== today) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = toISODateString(yesterday);
+      if (streak.lastStudyDate === yesterdayStr) {
+        streak.currentStreak++;
+      } else {
+        streak.currentStreak = 1;
+      }
+      streak.longestStreak = Math.max(
+        streak.longestStreak,
+        streak.currentStreak,
+      );
+      streak.lastStudyDate = today;
+    }
+    streak.totalReviews++;
+
+    // Parallel write: card + index + streak
     await Promise.all([
-      kvPut(kvKeys.deck(userId), deck),
-      this.updateStreak(userId),
+      kvPut(kvKeys.card(userId, cardId), updated),
+      kvPut(kvKeys.deckIndex(userId), index),
+      kvPut(kvKeys.streak(userId), streak),
     ]);
+
     EpisodeService.trackReview(userId, updated.title).catch(() => {});
 
     return updated;
   },
 
   async getDueCards(userId: string): Promise<Card[]> {
-    const deck = await this.getDeck(userId);
-    return deck.cards.filter(isDue);
+    const index = await this.getCardIndex(userId);
+    const today = toISODateString();
+    const dueItems = index.filter((item) => item.dueDate <= today);
+
+    if (dueItems.length === 0) return [];
+
+    // Parallel fetch all due card details
+    const cards = await Promise.all(
+      dueItems.map((item) => this.getCard(userId, item.id)),
+    );
+
+    return cards.filter((c): c is Card => c !== null);
   },
 
   async getDueSummary(userId: string): Promise<DueSummary> {
-    const deck = await this.getDeck(userId);
+    const index = await this.getCardIndex(userId);
     const today = toISODateString();
 
     let due = 0;
     let overdue = 0;
     let newToday = 0;
 
-    for (const card of deck.cards) {
-      if (card.dueDate <= today) {
-        if (card.repetition === 0) newToday++;
-        else if (card.dueDate < today) overdue++;
+    for (const item of index) {
+      if (item.dueDate <= today) {
+        if (item.repetition === 0) newToday++;
+        else if (item.dueDate < today) overdue++;
         else due++;
       }
     }
@@ -133,7 +238,10 @@ export const ReviewService = {
       streak.currentStreak = 1;
     }
 
-    streak.longestStreak = Math.max(streak.longestStreak, streak.currentStreak);
+    streak.longestStreak = Math.max(
+      streak.longestStreak,
+      streak.currentStreak,
+    );
     streak.lastStudyDate = today;
     streak.totalReviews++;
 
@@ -141,17 +249,63 @@ export const ReviewService = {
     return streak;
   },
 
-  async getCardByKP(userId: string, knowledgePointId: string): Promise<Card | null> {
-    const deck = await this.getDeck(userId);
-    return deck.cards.find((c) => c.knowledgePointId === knowledgePointId) ?? null;
+  async getCardByKP(
+    userId: string,
+    knowledgePointId: string,
+  ): Promise<Card | null> {
+    const index = await this.getCardIndex(userId);
+    const item = index.find((c) => c.knowledgePointId === knowledgePointId);
+    if (!item) return null;
+    return this.getCard(userId, item.id);
   },
 
-  async removeCardByKP(userId: string, knowledgePointId: string): Promise<void> {
-    const deck = await this.getDeck(userId);
-    deck.cards = deck.cards.filter(
+  async removeCardByKP(
+    userId: string,
+    knowledgePointId: string,
+  ): Promise<void> {
+    const index = await this.getCardIndex(userId);
+    const item = index.find((c) => c.knowledgePointId === knowledgePointId);
+    if (!item) return;
+
+    const filtered = index.filter(
       (c) => c.knowledgePointId !== knowledgePointId,
     );
-    deck.updatedAt = new Date().toISOString();
-    await kvPut(kvKeys.deck(userId), deck);
+
+    // Parallel: delete card + update index
+    await Promise.all([
+      kvDelete(kvKeys.card(userId, item.id)),
+      kvPut(kvKeys.deckIndex(userId), filtered),
+    ]);
+  },
+
+  async syncCardTitle(
+    userId: string,
+    knowledgePointId: string,
+    newTitle: string,
+  ): Promise<void> {
+    const index = await this.getCardIndex(userId);
+    const item = index.find((c) => c.knowledgePointId === knowledgePointId);
+    if (!item || item.title === newTitle) return;
+
+    // Update index
+    item.title = newTitle;
+
+    // Update full card
+    const card = await this.getCard(userId, item.id);
+    if (card) {
+      card.title = newTitle;
+      await Promise.all([
+        kvPut(kvKeys.card(userId, item.id), card),
+        kvPut(kvKeys.deckIndex(userId), index),
+      ]);
+    } else {
+      await kvPut(kvKeys.deckIndex(userId), index);
+    }
+  },
+
+  /** Get total card count (used by dashboard summary). */
+  async getCardCount(userId: string): Promise<number> {
+    const index = await this.getCardIndex(userId);
+    return index.length;
   },
 };

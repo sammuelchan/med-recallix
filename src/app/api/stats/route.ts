@@ -32,21 +32,20 @@ export async function GET(req: NextRequest) {
     }
     const today = dates[dates.length - 1];
 
-    // All KV reads in parallel: 3 single-key + 1 batch (7 episodes)
-    const [deck, kpIndex, streak, episodes] = await Promise.all([
-      ReviewService.getDeck(userId),
+    // All KV reads in parallel: index + kp-index + streak + episodes
+    const [cardIndex, kpIndex, streak, episodes] = await Promise.all([
+      ReviewService.getCardIndex(userId),
       KnowledgeService.getIndex(userId),
       ReviewService.getStreak(userId),
       EpisodeService.getEpisodes(userId, dates),
     ]);
 
-    const cards = deck.cards;
     const totalKP = kpIndex.length;
-    const totalCards = cards.length;
-    const mastered = cards.filter((c) => c.repetition >= 3 && c.efactor >= 2.5).length;
-    const learning = cards.filter((c) => c.repetition > 0 && c.repetition < 3).length;
-    const newCards = cards.filter((c) => c.repetition === 0).length;
-    const dueToday = cards.filter((c) => c.dueDate <= today).length;
+    const totalCards = cardIndex.length;
+    const mastered = cardIndex.filter((c) => c.repetition >= 3 && c.efactor >= 2.5).length;
+    const learning = cardIndex.filter((c) => c.repetition > 0 && c.repetition < 3).length;
+    const newCards = cardIndex.filter((c) => c.repetition === 0).length;
+    const dueToday = cardIndex.filter((c) => c.dueDate <= today).length;
 
     const todayEpisode = episodes[episodes.length - 1];
     const recentDays = dates.map((date, idx) => ({

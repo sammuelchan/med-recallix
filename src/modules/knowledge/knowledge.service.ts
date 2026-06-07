@@ -5,6 +5,7 @@
  *   - Per-user KV storage (each KP stored individually for fast access)
  *   - Lightweight index (KPIndexItem[]) for list/search without loading full content
  *   - Hierarchical category tree rebuilt on every write for category navigation
+ *   - Parallelized KV operations for optimal performance
  *
  * Data model:
  *   KP record  → kvKeys.knowledgePoint(userId, kpId) → full KnowledgePoint
@@ -24,34 +25,75 @@ import type {
 import type { CreateKPInput, UpdateKPInput } from "./knowledge.schema";
 
 export const KnowledgeService = {
+  generateDisplayTitle(
+    title: string,
+    category: string[],
+    existingTitles?: string[],
+  ): string {
+    const base =
+      category.length > 0
+        ? `${category.join(" > ")} > ${title}`
+        : title;
+
+    if (!existingTitles || !existingTitles.includes(base)) {
+      return base;
+    }
+
+    const dateStr = new Date().toLocaleDateString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+    });
+    return `${base} (${dateStr})`;
+  },
+
   async create(userId: string, input: CreateKPInput): Promise<KnowledgePoint> {
     const id = generateId();
     const now = new Date().toISOString();
+
+    // Parallel: read index while preparing KP
+    const index = await this.getIndex(userId);
+    const existingTitles = index.map((item) => item.displayTitle);
+
+    const displayTitle = this.generateDisplayTitle(
+      input.title,
+      input.category,
+      existingTitles,
+    );
 
     const kp: KnowledgePoint = {
       id,
       userId,
       title: input.title,
-      content: input.content,
+      displayTitle,
+      contentMode: input.contentMode ?? "text",
+      content: input.content ?? "",
+      qaItems: input.qaItems,
       category: input.category,
       tags: input.tags,
       createdAt: now,
       updatedAt: now,
     };
 
-    await kvPut(kvKeys.knowledgePoint(userId, id), kp);
-
-    const index = await this.getIndex(userId);
-    index.push({
+    const indexItem: KPIndexItem = {
       id,
       title: kp.title,
+      displayTitle: kp.displayTitle,
+      contentMode: kp.contentMode,
       category: kp.category,
       tags: kp.tags,
       updatedAt: now,
-    });
-    await kvPut(kvKeys.knowledgeIndex(userId), index);
+    };
 
-    await this.rebuildCategoryTree(userId, index);
+    index.push(indexItem);
+
+    // Parallel batch: persist KP + index simultaneously
+    await Promise.all([
+      kvPut(kvKeys.knowledgePoint(userId, id), kp),
+      kvPut(kvKeys.knowledgeIndex(userId), index),
+    ]);
+
+    // Fire-and-forget: category tree rebuild (non-critical path)
+    this.rebuildCategoryTree(userId, index).catch(() => {});
 
     return kp;
   },
@@ -78,7 +120,10 @@ export const KnowledgeService = {
     kpId: string,
     input: UpdateKPInput,
   ): Promise<KnowledgePoint> {
-    const existing = await this.get(userId, kpId);
+    const [existing, index] = await Promise.all([
+      this.get(userId, kpId),
+      this.getIndex(userId),
+    ]);
     const now = new Date().toISOString();
 
     const updated: KnowledgePoint = {
@@ -87,32 +132,50 @@ export const KnowledgeService = {
       updatedAt: now,
     };
 
-    await kvPut(kvKeys.knowledgePoint(userId, kpId), updated);
+    if (input.title || input.category) {
+      const existingTitles = index
+        .filter((item) => item.id !== kpId)
+        .map((item) => item.displayTitle);
+      updated.displayTitle = this.generateDisplayTitle(
+        updated.title,
+        updated.category,
+        existingTitles,
+      );
+    }
 
-    const index = await this.getIndex(userId);
     const idx = index.findIndex((item) => item.id === kpId);
     if (idx >= 0) {
       index[idx] = {
         id: kpId,
         title: updated.title,
+        displayTitle: updated.displayTitle,
+        contentMode: updated.contentMode,
         category: updated.category,
         tags: updated.tags,
         updatedAt: now,
       };
-      await kvPut(kvKeys.knowledgeIndex(userId), index);
-      await this.rebuildCategoryTree(userId, index);
     }
+
+    // Parallel: persist KP + index simultaneously
+    await Promise.all([
+      kvPut(kvKeys.knowledgePoint(userId, kpId), updated),
+      kvPut(kvKeys.knowledgeIndex(userId), index),
+    ]);
+
+    this.rebuildCategoryTree(userId, index).catch(() => {});
 
     return updated;
   },
 
   async delete(userId: string, kpId: string): Promise<void> {
-    await kvDelete(kvKeys.knowledgePoint(userId, kpId));
-
-    const index = await this.getIndex(userId);
+    // Parallel: delete KP record + read index
+    const [, index] = await Promise.all([
+      kvDelete(kvKeys.knowledgePoint(userId, kpId)),
+      this.getIndex(userId),
+    ]);
     const filtered = index.filter((item) => item.id !== kpId);
     await kvPut(kvKeys.knowledgeIndex(userId), filtered);
-    await this.rebuildCategoryTree(userId, filtered);
+    this.rebuildCategoryTree(userId, filtered).catch(() => {});
   },
 
   async getIndex(userId: string): Promise<KPIndexItem[]> {

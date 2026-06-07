@@ -6,4 +6,7 @@ export type {
   KPIndexItem,
   CategoryNode,
   CategoryTree,
+  ContentMode,
+  QAPair,
+  BlankPosition,
 } from "./knowledge.types";

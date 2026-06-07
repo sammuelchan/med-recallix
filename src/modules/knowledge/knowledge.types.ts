@@ -5,13 +5,33 @@
  * KPIndexItem    — lightweight index row (no content) for list rendering
  * CategoryNode   — tree node with name, children, and KP count
  * CategoryTree   — root-level container for the category hierarchy
+ * QAPair         — question-answer pair for Q&A mode
+ * BlankPosition  — position of a masked word/phrase in fill-blank mode
  */
+
+export type ContentMode = "text" | "qa";
+
+export interface BlankPosition {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface QAPair {
+  id: string;
+  question: string;
+  answer: string;
+  blanks?: BlankPosition[];
+}
 
 export interface KnowledgePoint {
   id: string;
   userId: string;
   title: string;
+  displayTitle: string;
+  contentMode: ContentMode;
   content: string;
+  qaItems?: QAPair[];
   category: string[];
   tags: string[];
   createdAt: string;
@@ -21,6 +41,8 @@ export interface KnowledgePoint {
 export interface KPIndexItem {
   id: string;
   title: string;
+  displayTitle: string;
+  contentMode: ContentMode;
   category: string[];
   tags: string[];
   updatedAt: string;

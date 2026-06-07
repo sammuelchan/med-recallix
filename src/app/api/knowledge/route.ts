@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
     const input = CreateKPSchema.parse(body);
     const kp = await KnowledgeService.create(userId, input);
 
-    await ReviewService.addCard(userId, kp.id, kp.title);
+    // Fire-and-forget: add review card (non-blocking for response)
+    ReviewService.addCard(userId, kp.id, kp.displayTitle).catch(() => {});
 
     return NextResponse.json({ success: true, data: kp }, { status: 201 });
   } catch (err) {
