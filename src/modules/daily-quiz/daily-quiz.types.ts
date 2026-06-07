@@ -9,6 +9,8 @@ export type DailyQuizStatus =
 
 export type QuestionSourceType = "error_review" | "weak_area" | "new_coverage";
 
+export type QuestionGeneratedBy = "qa_pair" | "ai" | "cache";
+
 export interface DailyQuizQuestion {
   id: string;
   stem: string;
@@ -17,6 +19,7 @@ export interface DailyQuizQuestion {
   explanation: string;
   sourceKpId: string;
   sourceType: QuestionSourceType;
+  generatedBy?: QuestionGeneratedBy;
 }
 
 export interface DailyQuizSet {
@@ -86,6 +89,24 @@ export interface QuizCachePool {
   userId: string;
   updatedAt: string;
   questions: CachedQuestion[];
+}
+
+// ─── Question Feedback (用户对题目质量的反馈) ─────────────────
+
+export interface QuestionFeedback {
+  questionId: string;
+  userId: string;
+  date: string;
+  type: "wrong_answer" | "irrelevant_options" | "unclear_stem" | "other";
+  correctAnswer?: string;
+  comment?: string;
+  createdAt: string;
+}
+
+export interface QuestionFeedbackIndex {
+  userId: string;
+  updatedAt: string;
+  feedbacks: QuestionFeedback[];
 }
 
 // ─── Audit Log ─────────────────────────────────────────────

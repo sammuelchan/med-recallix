@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Clock, RefreshCw } from "lucide-react";
+import { ArrowLeft, Clock, RefreshCw, Flag } from "lucide-react";
 import { Header, PageContainer } from "@/shared/components/layout";
 import { cn } from "@/shared/lib/utils";
 import type { DailyQuizQuestion, DailyQuizStatus } from "@/modules/daily-quiz";
@@ -48,6 +48,8 @@ export default function DailyQuizPage() {
   const [elapsed, setElapsed] = useState(0);
   const [regenerating, setRegenerating] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 题目锁: 一旦展示某题，锁定其引用直到用户点击"下一题"
@@ -211,6 +213,8 @@ export default function DailyQuizPage() {
     isAnsweringRef.current = false;
     setSelectedAnswer(null);
     setFeedback(null);
+    setShowFeedback(false);
+    setFeedbackSent(false);
 
     if (isLastReady) {
       setState((prev) => ({
@@ -254,6 +258,24 @@ export default function DailyQuizPage() {
     } finally {
       setRegenerating(false);
     }
+  };
+
+  const handleFeedback = async (type: string, correctAnswer?: string, comment?: string) => {
+    if (!currentQuestion) return;
+    try {
+      await fetch("/api/daily-quiz/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionId: currentQuestion.id,
+          type,
+          correctAnswer,
+          comment,
+        }),
+      });
+      setFeedbackSent(true);
+      setShowFeedback(false);
+    } catch {}
   };
 
   const formatTime = (seconds: number) => {
@@ -440,11 +462,39 @@ export default function DailyQuizPage() {
                 feedback.isCorrect ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50",
               )}
             >
-              <p className="mb-1 text-sm font-medium">
-                {feedback.isCorrect ? "✓ 回答正确！" : "✗ 回答错误"}
-              </p>
+              <div className="mb-1 flex items-center justify-between">
+                <p className="text-sm font-medium">
+                  {feedback.isCorrect ? "✓ 回答正确！" : "✗ 回答错误"}
+                </p>
+                {currentQuestion?.generatedBy && (
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500">
+                    {currentQuestion.generatedBy === "qa_pair" ? "来源: 知识点QA" :
+                     currentQuestion.generatedBy === "ai" ? "来源: AI生成" : "来源: 题库"}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-gray-600">{feedback.explanation}</p>
+              <div className="mt-2 flex items-center gap-2">
+                {!feedbackSent ? (
+                  <button
+                    onClick={() => setShowFeedback(true)}
+                    className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-500 transition-colors hover:border-orange-300 hover:text-orange-600"
+                  >
+                    <Flag className="h-3 w-3" />
+                    报告问题
+                  </button>
+                ) : (
+                  <span className="text-xs text-green-600">已收到反馈，感谢！</span>
+                )}
+              </div>
             </div>
+          )}
+
+          {showFeedback && (
+            <FeedbackDialog
+              onSubmit={handleFeedback}
+              onClose={() => setShowFeedback(false)}
+            />
           )}
 
           {feedback && (
@@ -465,5 +515,96 @@ export default function DailyQuizPage() {
         </div>
       </PageContainer>
     </>
+  );
+}
+
+function FeedbackDialog({
+  onSubmit,
+  onClose,
+}: {
+  onSubmit: (type: string, correctAnswer?: string, comment?: string) => void;
+  onClose: () => void;
+}) {
+  const [type, setType] = useState("wrong_answer");
+  const [correctAnswer, setCorrectAnswer] = useState("");
+  const [comment, setComment] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
+        <p className="mb-3 text-base font-semibold text-gray-800 dark:text-gray-200">
+          反馈题目问题
+        </p>
+
+        <div className="mb-3 space-y-2">
+          {[
+            { value: "wrong_answer", label: "答案错误" },
+            { value: "irrelevant_options", label: "选项与题干无关" },
+            { value: "unclear_stem", label: "题干表述不清" },
+            { value: "other", label: "其他问题" },
+          ].map((opt) => (
+            <label key={opt.value} className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="radio"
+                name="feedback_type"
+                value={opt.value}
+                checked={type === opt.value}
+                onChange={(e) => setType(e.target.value)}
+                className="h-4 w-4 text-blue-500"
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+
+        {type === "wrong_answer" && (
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-gray-500">你认为正确答案是</label>
+            <div className="flex gap-2">
+              {["A", "B", "C", "D", "E"].map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setCorrectAnswer(opt)}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition-colors",
+                    correctAnswer === opt
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-blue-100",
+                  )}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mb-4">
+          <label className="mb-1 block text-xs text-gray-500">补充说明（可选）</label>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="请描述具体问题..."
+            className="w-full rounded-lg border border-gray-200 p-2 text-sm outline-none focus:border-blue-300"
+            rows={2}
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => onSubmit(type, correctAnswer || undefined, comment || undefined)}
+            className="flex-1 rounded-xl bg-blue-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-600"
+          >
+            提交反馈
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -33,6 +33,7 @@ export const kvKeys = {
   errorWeight: (userId: string) => `ew_${userId}`,
   quizCache: (userId: string) => `qc_${userId}`,
   dailyQuizAudit: (userId: string, date: string) => `dqlog_${userId}_${date}`,
+  quizFeedback: (userId: string) => `qfb_${userId}`,
 } as const;
 
 /** Global config keys stored in the "config" KV namespace. */

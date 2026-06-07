@@ -1,15 +1,20 @@
 export function buildDailyQuizPrompt(
   knowledgePoints: { title: string; content: string }[],
   count: number,
+  feedbackContext?: string,
 ): string {
   const kpText = knowledgePoints
     .map((kp, i) => `【知识点 ${i + 1}】${kp.title}\n${kp.content}`)
     .join("\n\n");
 
+  const feedbackSection = feedbackContext
+    ? `\n**用户历史反馈（请避免以下问题）：**\n${feedbackContext}\n`
+    : "";
+
   return `你是一位资深医学考试出题专家。请严格基于以下知识点内容，出 ${count} 道 A1/A2 型单选题。
 
 ${kpText}
-
+${feedbackSection}
 **核心要求（必须严格遵守）：**
 1. 每道题有 A-E 五个选项，只有一个正确答案
 2. **所有选项必须与题干属于同一医学领域/同一类别**。例如：题干问"治疗方案"，则5个选项都必须是治疗方案；题干问"临床表现"，则5个选项都必须是临床表现

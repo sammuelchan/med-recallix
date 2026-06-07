@@ -21,6 +21,8 @@ import type {
   ErrorWeightIndex,
   QuizCachePool,
   CachedQuestion,
+  QuestionFeedback,
+  QuestionFeedbackIndex,
 } from "./daily-quiz.types";
 import type { KnowledgePoint } from "@/modules/knowledge";
 import type { KPIndexItem } from "@/modules/knowledge";
@@ -313,6 +315,70 @@ export const DailyQuizService = {
     return this.generateDailyQuiz(userId);
   },
 
+  /**
+   * 用户提交题目反馈（答案错误、选项无关等）。
+   * 反馈存入 KV，在下次生成时作为上下文传给 AI 避免同类错误。
+   */
+  async submitFeedback(
+    userId: string,
+    feedback: {
+      questionId: string;
+      type: string;
+      correctAnswer?: string;
+      comment?: string;
+    },
+  ): Promise<void> {
+    const feedbackIndex = await kvGet<QuestionFeedbackIndex>(kvKeys.quizFeedback(userId)) ?? {
+      userId,
+      updatedAt: new Date().toISOString(),
+      feedbacks: [],
+    };
+
+    feedbackIndex.feedbacks.push({
+      questionId: feedback.questionId,
+      userId,
+      date: toISODateString(),
+      type: feedback.type as QuestionFeedback["type"],
+      correctAnswer: feedback.correctAnswer,
+      comment: feedback.comment,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Keep last 50 feedbacks (rolling window)
+    if (feedbackIndex.feedbacks.length > 50) {
+      feedbackIndex.feedbacks = feedbackIndex.feedbacks.slice(-50);
+    }
+    feedbackIndex.updatedAt = new Date().toISOString();
+
+    await kvPut(kvKeys.quizFeedback(userId), feedbackIndex);
+  },
+
+  /**
+   * 构建反馈上下文，嵌入 AI Prompt 中避免重复犯错。
+   * 取最近 10 条反馈，生成简短的避错提示。
+   */
+  async buildFeedbackContext(userId: string): Promise<string | undefined> {
+    const index = await kvGet<QuestionFeedbackIndex>(kvKeys.quizFeedback(userId));
+    if (!index || index.feedbacks.length === 0) return undefined;
+
+    const recent = index.feedbacks.slice(-10);
+    const typeLabels: Record<string, string> = {
+      wrong_answer: "答案错误",
+      irrelevant_options: "选项与题干无关",
+      unclear_stem: "题干表述不清",
+      other: "其他问题",
+    };
+
+    const lines = recent.map((fb) => {
+      let line = `- 问题类型: ${typeLabels[fb.type] ?? fb.type}`;
+      if (fb.correctAnswer) line += `，用户认为正确答案应为: ${fb.correctAnswer}`;
+      if (fb.comment) line += `，备注: ${fb.comment}`;
+      return line;
+    });
+
+    return lines.join("\n");
+  },
+
   async completeQuiz(userId: string): Promise<DailyQuizResult> {
     const today = toISODateString();
     const [quizSet, progress] = await Promise.all([
@@ -504,9 +570,13 @@ export const DailyQuizService = {
       return this.getFallbackQuestions(userId, batchSize);
     }
 
+    // Load user feedback to avoid repeating past mistakes
+    const feedbackContext = await this.buildFeedbackContext(userId);
+
     const prompt = buildDailyQuizPrompt(
       validKps.map((kp) => ({ title: kp.title, content: kp.content })),
       aiNeeded,
+      feedbackContext,
     );
 
     try {
@@ -571,6 +641,7 @@ export const DailyQuizService = {
           explanation: q.explanation,
           sourceKpId: kp?.id ?? "",
           sourceType,
+          generatedBy: "ai",
         });
       }
 
@@ -663,6 +734,7 @@ export const DailyQuizService = {
         explanation: `【答案分析】正确答案为${finalAnswer}（${qa.answer}）。本题考查知识点「${kp.title}」。`,
         sourceKpId: kp.id,
         sourceType,
+        generatedBy: "qa_pair" as const,
       };
     });
   },
@@ -745,6 +817,7 @@ export const DailyQuizService = {
       explanation: q.explanation,
       sourceKpId: q.sourceKpId,
       sourceType: "new_coverage" as const,
+      generatedBy: "cache" as const,
     }));
   },
 
