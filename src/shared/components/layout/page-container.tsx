@@ -1,8 +1,8 @@
 /**
  * Page Container — constrains page content to max-w-lg with padding.
  *
- * Adds bottom padding (pb-20) to avoid overlap with the fixed BottomNav.
- * Paired with Header on every app page for consistent layout.
+ * Content scrolls independently within this container.
+ * The BottomNav below is a separate flex item that doesn't overlap.
  */
 
 import { cn } from "@/shared/lib/utils";
@@ -14,7 +14,7 @@ interface PageContainerProps {
 
 export function PageContainer({ children, className }: PageContainerProps) {
   return (
-    <main className={cn("flex-1 min-h-0 overflow-y-auto pb-32 px-4 py-4", className)}>
+    <main className={cn("flex-1 min-h-0 overflow-y-auto px-4 py-4", className)}>
       <div className="mx-auto max-w-lg">{children}</div>
     </main>
   );

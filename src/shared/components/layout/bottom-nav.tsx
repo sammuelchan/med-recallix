@@ -1,10 +1,10 @@
 /**
- * Bottom Navigation Bar — mobile-first tab bar fixed at viewport bottom.
+ * Bottom Navigation Bar — mobile-first tab bar at viewport bottom.
  *
  * Five tabs: Dashboard, Knowledge, Review, Chat, Settings.
  * Active state is determined by matching the current pathname prefix.
- * Uses backdrop-blur for a glass-morphism effect and `safe-bottom` for
- * devices with home-bar safe areas (iPhone notch).
+ * Uses a solid background (non-floating, non-transparent) to avoid
+ * occluding content. Takes real space in the flex layout.
  */
 "use client";
 
@@ -31,8 +31,8 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 safe-bottom">
-      <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-2">
+    <nav className="shrink-0 border-t bg-background safe-bottom z-40">
+      <div className="mx-auto flex h-14 max-w-lg items-center justify-around px-2">
         {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
           const isActive = pathname.startsWith(href);
           return (

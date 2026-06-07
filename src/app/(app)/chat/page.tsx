@@ -44,7 +44,7 @@ export default function ChatPage() {
     sessions.find((s) => s.sessionId === sessionId)?.title ?? "新对话";
 
   return (
-    <div className="flex h-[100dvh] flex-col">
+    <div className="flex flex-1 min-h-0 flex-col">
       <Header
         title={currentTitle}
         action={
@@ -63,7 +63,7 @@ export default function ChatPage() {
         }
       />
 
-      <div className="relative flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 min-h-0 overflow-hidden">
         {showSidebar && (
           <>
             <div
@@ -91,8 +91,6 @@ export default function ChatPage() {
       </div>
 
       <ChatInput onSend={sendMessage} disabled={isStreaming} />
-
-      <div className="h-16" />
     </div>
   );
 }

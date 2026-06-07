@@ -456,7 +456,7 @@ export function KnowledgeForm({
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <div className="sticky bottom-20 pt-2 pb-2 bg-background/95 backdrop-blur space-y-2">
+      <div className="sticky bottom-0 pt-2 pb-2 bg-background/95 backdrop-blur space-y-2">
         {contentMode === "qa" && (
           <Button
             type="button"
