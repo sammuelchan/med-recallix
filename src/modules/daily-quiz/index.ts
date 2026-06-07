@@ -1,4 +1,5 @@
 export { DailyQuizService } from "./daily-quiz.service";
+export { DailyQuizAuditService } from "./daily-quiz.audit";
 export { SubmitAnswerSchema } from "./daily-quiz.schema";
 export type { SubmitAnswerInput } from "./daily-quiz.schema";
 export type {
@@ -10,6 +11,9 @@ export type {
   ErrorWeightIndex,
   ErrorWeightItem,
   QuestionSourceType,
+  AuditEventType,
+  AuditLogEntry,
+  DailyQuizAuditLog,
 } from "./daily-quiz.types";
 export {
   calculateWeight,

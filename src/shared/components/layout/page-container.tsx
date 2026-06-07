@@ -14,7 +14,7 @@ interface PageContainerProps {
 
 export function PageContainer({ children, className }: PageContainerProps) {
   return (
-    <main className={cn("flex-1 min-h-0 overflow-y-auto px-4 py-4", className)}>
+    <main className={cn("flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-8", className)}>
       <div className="mx-auto max-w-lg">{children}</div>
     </main>
   );

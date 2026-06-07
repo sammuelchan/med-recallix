@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header, PageContainer } from "@/shared/components/layout";
-import { Flame, BookOpen, Brain, Clock, TrendingUp, Trophy, Plus, RotateCcw } from "lucide-react";
+import { Flame, BookOpen, Brain, Clock, TrendingUp, Trophy, Plus, RotateCcw, FileText } from "lucide-react";
 import { cachedFetch } from "@/shared/lib/fetch-cache";
 import type { StreakData } from "@/modules/review";
 import type { DailyEpisode } from "@/modules/agent";
@@ -256,7 +256,16 @@ export default function StatsPage() {
           {/* Daily Quiz Stats */}
           {data.dailyQuizStats && (
             <div className="rounded-2xl border p-4">
-              <h3 className="mb-3 text-sm font-medium text-muted-foreground">每日练习</h3>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-medium text-muted-foreground">每日练习</h3>
+                <Link
+                  href="/daily-quiz/audit"
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <FileText className="size-3" />
+                  生成日志
+                </Link>
+              </div>
               <div className="mb-3 flex items-center gap-4">
                 {data.dailyQuizStats.streak > 0 && (
                   <div className="flex items-center gap-1.5">

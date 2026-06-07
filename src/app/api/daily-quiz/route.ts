@@ -64,7 +64,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const quiz = await DailyQuizService.generateDailyQuiz(userId);
-    return NextResponse.json({ success: true, data: { status: quiz.status, quiz } });
+
+    let warning: string | undefined;
+    if (quiz.readyCount === 0) {
+      warning = "题目生成失败，请检查 AI 配置或为知识点添加 QA 问答";
+    }
+
+    return NextResponse.json({ success: true, data: { status: quiz.status, quiz, warning } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "服务器错误";
     const status = message.includes("知识点不足") ? 400 : 500;

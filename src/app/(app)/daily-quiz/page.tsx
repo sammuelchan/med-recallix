@@ -24,7 +24,7 @@ export default function DailyQuizPage() {
     readyCount: 0,
     currentIndex: 0,
     correctCount: 0,
-    total: 50,
+    total: 20,
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);

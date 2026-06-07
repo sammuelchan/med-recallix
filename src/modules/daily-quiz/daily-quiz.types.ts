@@ -87,3 +87,32 @@ export interface QuizCachePool {
   updatedAt: string;
   questions: CachedQuestion[];
 }
+
+// ─── Audit Log ─────────────────────────────────────────────
+
+export type AuditEventType =
+  | "generate_start"
+  | "generate_batch_ok"
+  | "generate_batch_fail"
+  | "generate_fallback"
+  | "generate_complete"
+  | "continue_start"
+  | "continue_ok"
+  | "continue_fail"
+  | "kp_insufficient"
+  | "ai_key_missing";
+
+export interface AuditLogEntry {
+  timestamp: string;
+  event: AuditEventType;
+  detail: string;
+  questionCount?: number;
+  durationMs?: number;
+  error?: string;
+}
+
+export interface DailyQuizAuditLog {
+  userId: string;
+  date: string;
+  entries: AuditLogEntry[];
+}

@@ -12,6 +12,7 @@ import {
   incrementCorrect,
   createErrorWeightItem,
 } from "./daily-quiz.weight";
+import { DailyQuizAuditService } from "./daily-quiz.audit";
 import type {
   DailyQuizSet,
   DailyQuizProgress,
@@ -24,9 +25,9 @@ import type {
 import type { KnowledgePoint } from "@/modules/knowledge";
 import type { KPIndexItem } from "@/modules/knowledge";
 
-const TARGET_TOTAL = 50;
+const TARGET_TOTAL = 20;
 const FIRST_BATCH = 10;
-const MIN_KP_COUNT = 5;
+const MIN_KP_COUNT = 1;
 const MAX_CACHE_SIZE = 500;
 const ERROR_WEIGHT_MAX_SIZE = 100;
 
@@ -44,8 +45,9 @@ export const DailyQuizService = {
       kvGet<DailyQuizResult>(kvKeys.dailyQuizResult(userId, today)),
     ]);
 
-    // Async cleanup of expired records (fire-and-forget, non-blocking)
+    // Async cleanup of expired records + audit logs (fire-and-forget, non-blocking)
     this.cleanupExpiredRecords(userId).catch(() => {});
+    DailyQuizAuditService.cleanupExpiredLogs(userId).catch(() => {});
 
     return {
       status: quiz?.status ?? null,
@@ -65,6 +67,7 @@ export const DailyQuizService = {
 
     const kpIndex = await KnowledgeService.getIndex(userId);
     if (kpIndex.length < MIN_KP_COUNT) {
+      DailyQuizAuditService.append(userId, "kp_insufficient", `知识点数量 ${kpIndex.length}，需要至少 ${MIN_KP_COUNT} 个`).catch(() => {});
       throw new Error(`知识点不足 ${MIN_KP_COUNT} 个，请先添加更多知识点`);
     }
 
@@ -75,7 +78,13 @@ export const DailyQuizService = {
       ...selection.newCoverage,
     ];
 
+    DailyQuizAuditService.append(userId, "generate_start", `开始生成，知识点 ${kpIndex.length} 个，选取 ${allKpIds.length} 个（错题 ${selection.errorReview.length} / 薄弱 ${selection.weakArea.length} / 新覆盖 ${selection.newCoverage.length}），首批目标 ${FIRST_BATCH} 题`).catch(() => {});
+
+    const startTime = Date.now();
     const questions = await this.generateBatch(userId, allKpIds, selection, FIRST_BATCH);
+    const durationMs = Date.now() - startTime;
+
+    DailyQuizAuditService.append(userId, "generate_batch_ok", `首批生成完成，得到 ${questions.length} 题`, { questionCount: questions.length, durationMs }).catch(() => {});
 
     const quizSet: DailyQuizSet = {
       id: generateId(),
@@ -89,6 +98,11 @@ export const DailyQuizService = {
     };
 
     await kvPut(kvKeys.dailyQuiz(userId, today), quizSet);
+
+    if (quizSet.status === "ready") {
+      DailyQuizAuditService.append(userId, "generate_complete", `生成完成，共 ${quizSet.readyCount} 题`, { questionCount: quizSet.readyCount }).catch(() => {});
+    }
+
     return quizSet;
   },
 
@@ -119,28 +133,48 @@ export const DailyQuizService = {
       ...selection.newCoverage,
     ];
 
+    DailyQuizAuditService.append(userId, "continue_start", `继续生成，已有 ${quizSet.readyCount} 题，剩余 ${remaining} 题`).catch(() => {});
+
     try {
       const batchSize = Math.min(remaining, 20);
+      const startTime = Date.now();
       const newQuestions = await this.generateBatch(
         userId,
         allKpIds,
         selection,
         batchSize,
       );
+      const durationMs = Date.now() - startTime;
 
       quizSet.questions.push(...newQuestions);
       quizSet.readyCount = quizSet.questions.length;
       quizSet.status = quizSet.readyCount >= TARGET_TOTAL ? "ready" : "partial";
-    } catch {
+
+      DailyQuizAuditService.append(userId, "continue_ok", `续批生成 ${newQuestions.length} 题，累计 ${quizSet.readyCount}/${TARGET_TOTAL}`, { questionCount: newQuestions.length, durationMs }).catch(() => {});
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      DailyQuizAuditService.append(userId, "continue_fail", `续批生成失败，尝试缓存降级`, { error: errorMsg }).catch(() => {});
+
       const fallback = await this.getFallbackQuestions(userId, remaining);
       if (fallback.length > 0) {
         quizSet.questions.push(...fallback);
         quizSet.readyCount = quizSet.questions.length;
+        DailyQuizAuditService.append(userId, "generate_fallback", `缓存降级成功，补充 ${fallback.length} 题`, { questionCount: fallback.length }).catch(() => {});
+      } else {
+        DailyQuizAuditService.append(userId, "generate_fallback", `缓存降级失败，缓存池为空`).catch(() => {});
       }
-      quizSet.status = "ready";
+      // Only mark ready if we have at least some questions
+      if (quizSet.readyCount > 0) {
+        quizSet.status = "ready";
+      }
     }
 
     await kvPut(kvKeys.dailyQuiz(userId, today), quizSet);
+
+    if (quizSet.status === "ready") {
+      DailyQuizAuditService.append(userId, "generate_complete", `生成完成，共 ${quizSet.readyCount} 题`, { questionCount: quizSet.readyCount }).catch(() => {});
+    }
+
     return quizSet;
   },
 
@@ -314,17 +348,24 @@ export const DailyQuizService = {
     const newKps = kpIndex
       .filter((kp) => !coveredKpIds.has(kp.id) || !usedSet.has(kp.id))
       .filter((kp) => !usedSet.has(kp.id))
-      .slice(0, 8)
+      .slice(0, 10)
       .map((kp) => kp.id);
 
-    // Handle insufficient KPs by redistributing
-    if (errorKps.length === 0) {
-      const extra = kpIndex
-        .filter((kp) => !usedSet.has(kp.id) && !newKps.includes(kp.id))
-        .slice(0, 5)
-        .map((kp) => kp.id);
-      weakKps.push(...extra.slice(0, 3));
-      newKps.push(...extra.slice(3));
+    // Ensure sufficient KPs: when error/weak are sparse, expand from all KPs
+    const totalSelected = errorKps.length + weakKps.length + newKps.length;
+    const targetSelected = Math.min(8, kpIndex.length);
+    if (totalSelected < targetSelected) {
+      const allUsed = new Set([...errorKps, ...weakKps, ...newKps]);
+      const shuffled = [...kpIndex]
+        .filter((kp) => !allUsed.has(kp.id))
+        .sort(() => Math.random() - 0.5);
+      const needed = targetSelected - totalSelected;
+      newKps.push(...shuffled.slice(0, needed).map((kp) => kp.id));
+    }
+
+    // Even with just 1 KP, ensure at least that KP is included
+    if (errorKps.length + weakKps.length + newKps.length === 0 && kpIndex.length > 0) {
+      newKps.push(kpIndex[0].id);
     }
 
     return {
@@ -340,11 +381,6 @@ export const DailyQuizService = {
     selection: { errorReview: string[]; weakArea: string[]; newCoverage: string[] },
     batchSize: number,
   ): Promise<DailyQuizQuestion[]> {
-    const config = await getAIConfig();
-    if (!config.apiKey || config.apiKey.length < 10) {
-      return this.getFallbackQuestions(userId, batchSize);
-    }
-
     const kpKeys = [...new Set(kpIds)].map((id) =>
       kvKeys.knowledgePoint(userId, id),
     );
@@ -352,24 +388,53 @@ export const DailyQuizService = {
     const validKps = kps.filter((kp): kp is KnowledgePoint => kp !== null);
 
     if (validKps.length === 0) {
+      DailyQuizAuditService.append(userId, "generate_batch_fail", `知识点内容全部加载失败，${kpIds.length} 个 KP 均为空`).catch(() => {});
+      return this.getFallbackQuestions(userId, batchSize);
+    }
+
+    const errorSet = new Set(selection.errorReview);
+    const weakSet = new Set(selection.weakArea);
+
+    // Phase 1: Extract questions from KP's built-in QA pairs (instant, no AI needed)
+    const qaQuestions = this.extractQAQuestions(validKps, batchSize, errorSet, weakSet);
+    if (qaQuestions.length > 0) {
+      DailyQuizAuditService.append(userId, "generate_batch_ok", `从知识点 QA 直接生成 ${qaQuestions.length} 题（无需 AI）`, { questionCount: qaQuestions.length, durationMs: 0 }).catch(() => {});
+    }
+
+    if (qaQuestions.length >= batchSize) {
+      return qaQuestions.slice(0, batchSize);
+    }
+
+    // Phase 2: Supplement with AI-generated questions
+    const aiNeeded = batchSize - qaQuestions.length;
+    const config = await getAIConfig();
+    if (!config.apiKey || config.apiKey.length < 10) {
+      DailyQuizAuditService.append(userId, "ai_key_missing", `AI API Key 未配置，已用 QA 生成 ${qaQuestions.length} 题`).catch(() => {});
+      if (qaQuestions.length > 0) return qaQuestions;
       return this.getFallbackQuestions(userId, batchSize);
     }
 
     const prompt = buildDailyQuizPrompt(
       validKps.map((kp) => ({ title: kp.title, content: kp.content })),
-      batchSize,
+      aiNeeded,
     );
 
     try {
       const client = createAIClient(config);
+      const aiStart = Date.now();
       const { text } = await generateText({
         model: client(config.model),
         prompt,
         temperature: 0.7,
       });
+      const aiDuration = Date.now() - aiStart;
 
       const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) return this.getFallbackQuestions(userId, batchSize);
+      if (!jsonMatch) {
+        DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 返回内容无法解析为 JSON 数组`, { durationMs: aiDuration, error: `响应前100字: ${text.slice(0, 100)}` }).catch(() => {});
+        if (qaQuestions.length > 0) return qaQuestions;
+        return this.getFallbackQuestions(userId, batchSize);
+      }
 
       const raw = JSON.parse(jsonMatch[0]) as Array<{
         stem: string;
@@ -378,10 +443,7 @@ export const DailyQuizService = {
         explanation: string;
       }>;
 
-      const errorSet = new Set(selection.errorReview);
-      const weakSet = new Set(selection.weakArea);
-
-      return raw.map((q, i) => {
+      const aiQuestions = raw.map((q, i) => {
         const kp = validKps[i % validKps.length];
         let sourceType: DailyQuizQuestion["sourceType"] = "new_coverage";
         if (kp && errorSet.has(kp.id)) sourceType = "error_review";
@@ -397,9 +459,115 @@ export const DailyQuizService = {
           sourceType,
         };
       });
-    } catch {
+
+      return [...qaQuestions, ...aiQuestions];
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 调用异常`, { error: errorMsg }).catch(() => {});
+      if (qaQuestions.length > 0) return qaQuestions;
       return this.getFallbackQuestions(userId, batchSize);
     }
+  },
+
+  /**
+   * Convert QA pairs from knowledge points into MCQ format.
+   * Uses the answer as correct option and generates distractors from other QA pairs.
+   */
+  extractQAQuestions(
+    kps: KnowledgePoint[],
+    maxCount: number,
+    errorSet: Set<string>,
+    weakSet: Set<string>,
+  ): DailyQuizQuestion[] {
+    const allQAs: { kp: KnowledgePoint; qa: { question: string; answer: string } }[] = [];
+
+    for (const kp of kps) {
+      if (kp.qaItems && kp.qaItems.length > 0) {
+        for (const qa of kp.qaItems) {
+          if (qa.question && qa.answer) {
+            allQAs.push({ kp, qa });
+          }
+        }
+      }
+    }
+
+    if (allQAs.length === 0) return [];
+
+    // Shuffle for variety
+    const shuffled = allQAs.sort(() => Math.random() - 0.5).slice(0, maxCount);
+
+    // Collect all answers as a distractor pool
+    const allAnswers = allQAs.map((item) => item.qa.answer);
+
+    return shuffled.map((item) => {
+      const { kp, qa } = item;
+      const distractors = this.pickDistractors(qa.answer, allAnswers, kps);
+      const options = [
+        { label: "A", text: qa.answer },
+        ...distractors.map((d, i) => ({ label: String.fromCharCode(66 + i), text: d })),
+      ];
+
+      // Shuffle options then re-label A-E sequentially
+      const shuffledOptions = options.sort(() => Math.random() - 0.5);
+      const relabeled = shuffledOptions.map((o, i) => ({
+        label: String.fromCharCode(65 + i),
+        text: o.text,
+      }));
+      const finalAnswer = relabeled.find((o) => o.text === qa.answer)?.label ?? "A";
+
+      let sourceType: DailyQuizQuestion["sourceType"] = "new_coverage";
+      if (errorSet.has(kp.id)) sourceType = "error_review";
+      else if (weakSet.has(kp.id)) sourceType = "weak_area";
+
+      return {
+        id: generateId(),
+        stem: qa.question,
+        options: relabeled,
+        answer: finalAnswer,
+        explanation: `正确答案：${qa.answer}`,
+        sourceKpId: kp.id,
+        sourceType,
+      };
+    });
+  },
+
+  /**
+   * Pick 4 distractor options that are different from the correct answer.
+   * Draws from other QA answers first, then generates simple variations.
+   */
+  pickDistractors(correct: string, allAnswers: string[], kps: KnowledgePoint[]): string[] {
+    const pool = new Set<string>();
+
+    // Add other QA answers as distractors
+    for (const ans of allAnswers) {
+      if (ans !== correct && ans.length > 0) pool.add(ans);
+    }
+
+    // Add KP titles as additional distractor source
+    for (const kp of kps) {
+      if (kp.title !== correct) pool.add(kp.title);
+    }
+
+    const candidates = [...pool].sort(() => Math.random() - 0.5);
+
+    // Need exactly 4 distractors for A-E options
+    const result: string[] = [];
+    for (const c of candidates) {
+      if (result.length >= 4) break;
+      result.push(c);
+    }
+
+    // If not enough distractors, pad with generic fillers
+    const fillers = ["以上都不是", "以上均正确", "无法确定", "需要进一步检查"];
+    let fillerIdx = 0;
+    while (result.length < 4 && fillerIdx < fillers.length) {
+      if (fillers[fillerIdx] !== correct) {
+        result.push(fillers[fillerIdx]);
+      }
+      fillerIdx++;
+    }
+
+    return result.slice(0, 4);
   },
 
   async getFallbackQuestions(
