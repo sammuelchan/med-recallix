@@ -393,9 +393,11 @@ export function KnowledgeForm({
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "处理中..." : submitLabel}
-      </Button>
+      <div className="sticky bottom-20 pt-2 pb-2 bg-background/95 backdrop-blur">
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? "处理中..." : submitLabel}
+        </Button>
+      </div>
     </form>
   );
 }
