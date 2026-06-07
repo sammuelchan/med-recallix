@@ -25,7 +25,7 @@ export default function DailyQuizPage() {
     readyCount: 0,
     currentIndex: 0,
     correctCount: 0,
-    total: 20,
+    total: 50,
     displayIndex: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -180,21 +180,35 @@ export default function DailyQuizPage() {
 
   const handleNext = async () => {
     const nextDisplayIndex = state.displayIndex + 1;
-    if (nextDisplayIndex >= state.readyCount) {
+    const isLastReady = nextDisplayIndex >= state.readyCount;
+    const noMoreComing = state.status === "ready" || state.status === "in_progress";
+    const allDone = nextDisplayIndex >= state.total || (isLastReady && noMoreComing);
+
+    if (allDone) {
       try {
         await fetch("/api/daily-quiz/complete", { method: "POST" });
       } catch {}
       router.push("/daily-quiz/report");
       return;
     }
+
     lockedQuestionRef.current = null;
     isAnsweringRef.current = false;
     setSelectedAnswer(null);
     setFeedback(null);
-    setState((prev) => ({
-      ...prev,
-      displayIndex: nextDisplayIndex,
-    }));
+
+    if (isLastReady) {
+      setState((prev) => ({
+        ...prev,
+        displayIndex: nextDisplayIndex,
+        status: "partial",
+      }));
+    } else {
+      setState((prev) => ({
+        ...prev,
+        displayIndex: nextDisplayIndex,
+      }));
+    }
   };
 
   const handleRegenerate = async () => {
@@ -209,11 +223,12 @@ export default function DailyQuizPage() {
         setSelectedAnswer(null);
         setFeedback(null);
         setElapsed(0);
+        const quiz = json.data.quiz;
         setState({
-          status: json.data.quiz.status,
-          questions: json.data.quiz.questions,
-          readyCount: json.data.quiz.readyCount,
-          total: json.data.quiz.totalCount,
+          status: quiz.status,
+          questions: quiz.questions,
+          readyCount: quiz.readyCount,
+          total: quiz.totalCount,
           currentIndex: 0,
           correctCount: 0,
           displayIndex: 0,
@@ -261,6 +276,25 @@ export default function DailyQuizPage() {
     );
   }
 
+  if (!currentQuestion && state.displayIndex < state.total && state.readyCount > 0) {
+    return (
+      <>
+        <Header title="今日练习" />
+        <PageContainer>
+          <div className="flex flex-col items-center justify-center gap-4 py-20">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+            <p className="text-sm text-gray-700 font-medium">
+              已完成 {state.readyCount} 题，正在准备更多题目...
+            </p>
+            <p className="text-xs text-gray-400">
+              已答 {state.displayIndex}/{state.total} 题
+            </p>
+          </div>
+        </PageContainer>
+      </>
+    );
+  }
+
   if (!currentQuestion) {
     return (
       <>
@@ -280,7 +314,10 @@ export default function DailyQuizPage() {
     );
   }
 
-  const displayIndex = Math.min(state.displayIndex, state.readyCount - 1);
+  const displayIndex = Math.min(state.displayIndex, Math.max(state.readyCount, 1) - 1);
+  const nextIdx = state.displayIndex + 1;
+  const isLastQuestion = nextIdx >= state.total ||
+    (nextIdx >= state.readyCount && (state.status === "ready" || state.status === "in_progress"));
 
   return (
     <>
@@ -289,7 +326,7 @@ export default function DailyQuizPage() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <span className="text-sm font-medium text-gray-700">
-          {displayIndex + 1}/{state.readyCount}
+          {displayIndex + 1}/{state.total}
         </span>
         <div className="flex items-center gap-2">
           <button
@@ -400,7 +437,7 @@ export default function DailyQuizPage() {
               onClick={handleNext}
               className="w-full rounded-xl bg-blue-500 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-600"
             >
-              {state.displayIndex + 1 >= state.readyCount ? "查看报告" : "下一题"}
+              {isLastQuestion ? "查看报告" : "下一题"}
             </button>
           )}
         </div>
@@ -408,7 +445,7 @@ export default function DailyQuizPage() {
         <div className="fixed bottom-0 left-0 right-0 h-1 bg-gray-100">
           <div
             className="h-full bg-blue-500 transition-all duration-300"
-            style={{ width: `${((state.displayIndex + (feedback ? 1 : 0)) / state.readyCount) * 100}%` }}
+            style={{ width: `${((state.displayIndex + (feedback ? 1 : 0)) / state.total) * 100}%` }}
           />
         </div>
       </PageContainer>

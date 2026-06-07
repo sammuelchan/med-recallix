@@ -25,9 +25,8 @@ import type {
 import type { KnowledgePoint } from "@/modules/knowledge";
 import type { KPIndexItem } from "@/modules/knowledge";
 
-const TARGET_TOTAL = 20;
-const MAX_QUESTIONS = 50;
-const FIRST_BATCH = 10;
+const FIRST_BATCH = 20;
+const TARGET_TOTAL = 50;
 const MIN_KP_COUNT = 1;
 const MAX_CACHE_SIZE = 500;
 const ERROR_WEIGHT_MAX_SIZE = 100;
@@ -102,6 +101,8 @@ export const DailyQuizService = {
 
     if (quizSet.status === "ready") {
       DailyQuizAuditService.append(userId, "generate_complete", `生成完成，共 ${quizSet.readyCount} 题`, { questionCount: quizSet.readyCount }).catch(() => {});
+    } else if (quizSet.status === "partial" && quizSet.readyCount >= FIRST_BATCH) {
+      this.continueGeneration(userId).catch(() => {});
     }
 
     return quizSet;
@@ -148,8 +149,8 @@ export const DailyQuizService = {
       const durationMs = Date.now() - startTime;
 
       quizSet.questions.push(...newQuestions);
-      if (quizSet.questions.length > MAX_QUESTIONS) {
-        quizSet.questions = quizSet.questions.slice(0, MAX_QUESTIONS);
+      if (quizSet.questions.length > TARGET_TOTAL) {
+        quizSet.questions = quizSet.questions.slice(0, TARGET_TOTAL);
       }
       quizSet.readyCount = quizSet.questions.length;
       quizSet.status = quizSet.readyCount >= TARGET_TOTAL ? "ready" : "partial";

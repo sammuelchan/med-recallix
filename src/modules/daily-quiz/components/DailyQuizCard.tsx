@@ -41,7 +41,7 @@ export function DailyQuizCard() {
           setState({
             status,
             readyCount: quiz?.readyCount,
-            totalCount: quiz?.totalCount ?? 20,
+            totalCount: quiz?.totalCount ?? 50,
             currentIndex: progress?.currentIndex,
             loading: false,
           });
@@ -52,7 +52,7 @@ export function DailyQuizCard() {
           setState({
             status: "generating",
             readyCount: quiz?.readyCount ?? 0,
-            totalCount: quiz?.totalCount ?? 20,
+            totalCount: quiz?.totalCount ?? 50,
             loading: false,
           });
           startPolling();
@@ -62,7 +62,7 @@ export function DailyQuizCard() {
         // Not generated — trigger async generation
         if (!status && !generationTriggered.current) {
           generationTriggered.current = true;
-          setState({ status: "generating", readyCount: 0, totalCount: 20, loading: false });
+          setState({ status: "generating", readyCount: 0, totalCount: 50, loading: false });
           try {
             const genRes = await fetch("/api/daily-quiz", { method: "POST" });
             const genJson = await genRes.json();
@@ -73,7 +73,7 @@ export function DailyQuizCard() {
               } else if (q.status === "ready") {
                 setState({ status: "ready", readyCount: q.readyCount, totalCount: q.totalCount, loading: false });
               } else {
-                setState({ status: "generating", readyCount: q.readyCount ?? 0, totalCount: q.totalCount ?? 20, loading: false });
+                setState({ status: "generating", readyCount: q.readyCount ?? 0, totalCount: q.totalCount ?? 50, loading: false });
                 startPolling();
               }
             } else {
@@ -149,18 +149,18 @@ export function DailyQuizCard() {
         <div className="mt-3 flex items-center gap-2">
           <button
             onClick={() => {
-              setState({ status: "generating", readyCount: 0, totalCount: 20, loading: false });
-              generationTriggered.current = false;
-              fetch("/api/daily-quiz", { method: "POST" })
-                .then((r) => r.json())
-                .then((json) => {
-                  if (json.success) {
-                    const q = json.data.quiz;
-                    if (q.status === "ready") {
-                      setState({ status: "ready", readyCount: q.readyCount, totalCount: q.totalCount, loading: false });
-                    } else {
-                      setState({ status: "generating", readyCount: q.readyCount ?? 0, totalCount: q.totalCount ?? 20, loading: false });
-                    }
+            setState({ status: "generating", readyCount: 0, totalCount: 50, loading: false });
+            generationTriggered.current = false;
+            fetch("/api/daily-quiz", { method: "POST" })
+              .then((r) => r.json())
+              .then((json) => {
+                if (json.success) {
+                  const q = json.data.quiz;
+                  if (q.status === "ready") {
+                    setState({ status: "ready", readyCount: q.readyCount, totalCount: q.totalCount, loading: false });
+                  } else {
+                    setState({ status: "generating", readyCount: q.readyCount ?? 0, totalCount: q.totalCount ?? 50, loading: false });
+                  }
                   } else {
                     setState({ status: null, loading: false, error: json.error ?? "生成失败" });
                   }
@@ -186,7 +186,7 @@ export function DailyQuizCard() {
   // Generating state — show progress bar
   if (state.status === "generating") {
     const ready = state.readyCount ?? 0;
-    const total = state.totalCount ?? 20;
+    const total = state.totalCount ?? 50;
     const percent = total > 0 ? Math.round((ready / total) * 100) : 0;
 
     return (
@@ -240,7 +240,7 @@ export function DailyQuizCard() {
 
   if (state.status === "ready" || state.status === "partial" || state.status === "in_progress") {
     const current = state.currentIndex ?? 0;
-    const total = state.readyCount ?? state.totalCount ?? 20;
+    const total = state.readyCount ?? state.totalCount ?? 50;
 
     return (
       <Link
