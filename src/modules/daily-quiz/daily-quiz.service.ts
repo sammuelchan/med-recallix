@@ -26,6 +26,7 @@ import type { KnowledgePoint } from "@/modules/knowledge";
 import type { KPIndexItem } from "@/modules/knowledge";
 
 const TARGET_TOTAL = 20;
+const MAX_QUESTIONS = 50;
 const FIRST_BATCH = 10;
 const MIN_KP_COUNT = 1;
 const MAX_CACHE_SIZE = 500;
@@ -147,6 +148,9 @@ export const DailyQuizService = {
       const durationMs = Date.now() - startTime;
 
       quizSet.questions.push(...newQuestions);
+      if (quizSet.questions.length > MAX_QUESTIONS) {
+        quizSet.questions = quizSet.questions.slice(0, MAX_QUESTIONS);
+      }
       quizSet.readyCount = quizSet.questions.length;
       quizSet.status = quizSet.readyCount >= TARGET_TOTAL ? "ready" : "partial";
 
@@ -241,6 +245,24 @@ export const DailyQuizService = {
         total: quizSet.readyCount,
       },
     };
+  },
+
+  async regenerateQuiz(userId: string): Promise<DailyQuizSet> {
+    const today = toISODateString();
+    const existing = await kvGet<DailyQuizSet>(kvKeys.dailyQuiz(userId, today));
+
+    if (existing?.status === "completed") {
+      throw new Error("今日练习已完成，无法重新生成");
+    }
+
+    await Promise.all([
+      kvDelete(kvKeys.dailyQuiz(userId, today)),
+      kvDelete(kvKeys.dailyQuizProgress(userId, today)),
+    ]);
+
+    DailyQuizAuditService.append(userId, "generate_start", "用户手动换题，重新生成").catch(() => {});
+
+    return this.generateDailyQuiz(userId);
   },
 
   async completeQuiz(userId: string): Promise<DailyQuizResult> {
@@ -443,13 +465,24 @@ export const DailyQuizService = {
         explanation: string;
       }>;
 
-      const aiQuestions = raw.map((q, i) => {
+      const validLabels = new Set(["A", "B", "C", "D", "E"]);
+      const aiQuestions: DailyQuizQuestion[] = [];
+
+      for (let i = 0; i < raw.length; i++) {
+        const q = raw[i];
+        if (!q.stem || !q.options || !q.answer || !q.explanation) continue;
+        if (!validLabels.has(q.answer)) continue;
+
+        const optionLabels = new Set(q.options.map((o) => o.label));
+        if (!optionLabels.has(q.answer)) continue;
+        if (q.options.length < 4) continue;
+
         const kp = validKps[i % validKps.length];
         let sourceType: DailyQuizQuestion["sourceType"] = "new_coverage";
         if (kp && errorSet.has(kp.id)) sourceType = "error_review";
         else if (kp && weakSet.has(kp.id)) sourceType = "weak_area";
 
-        return {
+        aiQuestions.push({
           id: generateId(),
           stem: q.stem,
           options: q.options,
@@ -457,8 +490,13 @@ export const DailyQuizService = {
           explanation: q.explanation,
           sourceKpId: kp?.id ?? "",
           sourceType,
-        };
-      });
+        });
+      }
+
+      if (aiQuestions.length === 0 && qaQuestions.length === 0) {
+        DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 生成 ${raw.length} 题但全部未通过校验`, { durationMs: aiDuration }).catch(() => {});
+        return this.getFallbackQuestions(userId, batchSize);
+      }
 
       return [...qaQuestions, ...aiQuestions];
     } catch (err) {

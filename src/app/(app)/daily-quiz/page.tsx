@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Clock } from "lucide-react";
+import { ArrowLeft, Clock, RefreshCw } from "lucide-react";
 import { Header, PageContainer } from "@/shared/components/layout";
 import { cn } from "@/shared/lib/utils";
 import type { DailyQuizQuestion, DailyQuizStatus } from "@/modules/daily-quiz";
@@ -14,6 +14,7 @@ interface QuizState {
   currentIndex: number;
   correctCount: number;
   total: number;
+  displayIndex: number;
 }
 
 export default function DailyQuizPage() {
@@ -25,6 +26,7 @@ export default function DailyQuizPage() {
     currentIndex: 0,
     correctCount: 0,
     total: 20,
+    displayIndex: 0,
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -35,8 +37,12 @@ export default function DailyQuizPage() {
     explanation: string;
   } | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [regenerating, setRegenerating] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lockedQuestionRef = useRef<DailyQuizQuestion | null>(null);
+  const isAnsweringRef = useRef(false);
 
   const fetchQuiz = useCallback(async () => {
     try {
@@ -64,14 +70,16 @@ export default function DailyQuizPage() {
           }));
         }
       } else if (quiz) {
+        const resumeIndex = progress?.currentIndex ?? 0;
         setState((prev) => ({
           ...prev,
           status,
           questions: quiz.questions,
           readyCount: quiz.readyCount,
           total: quiz.totalCount,
-          currentIndex: progress?.currentIndex ?? 0,
+          currentIndex: resumeIndex,
           correctCount: progress?.correctCount ?? 0,
+          displayIndex: resumeIndex,
         }));
       }
     } catch {
@@ -85,43 +93,62 @@ export default function DailyQuizPage() {
     fetchQuiz();
   }, [fetchQuiz]);
 
+  const hasQuestions = state.questions.length > 0;
   useEffect(() => {
+    if (!hasQuestions) return;
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, []);
+  }, [hasQuestions]);
 
   useEffect(() => {
-    if (state.status === "partial") {
-      pollRef.current = setInterval(async () => {
-        try {
-          const res = await fetch("/api/daily-quiz");
-          const json = await res.json();
-          if (json.success && json.data.quiz) {
-            const quiz = json.data.quiz;
-            setState((prev) => ({
+    if (state.status !== "partial") return;
+    let cancelled = false;
+    pollRef.current = setInterval(async () => {
+      if (cancelled || isAnsweringRef.current) return;
+      try {
+        const res = await fetch("/api/daily-quiz");
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success && json.data.quiz) {
+          const quiz = json.data.quiz;
+          setState((prev) => {
+            const merged = [...prev.questions];
+            for (let i = prev.questions.length; i < quiz.questions.length; i++) {
+              merged.push(quiz.questions[i]);
+            }
+            return {
               ...prev,
               status: quiz.status,
-              questions: quiz.questions,
+              questions: merged,
               readyCount: quiz.readyCount,
-            }));
-            if (quiz.status === "ready" && pollRef.current) {
-              clearInterval(pollRef.current);
-            }
+            };
+          });
+          if (quiz.status === "ready" && pollRef.current) {
+            clearInterval(pollRef.current);
           }
-        } catch {}
-      }, 3000);
-    }
+        }
+      } catch {}
+    }, 3000);
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      cancelled = true;
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     };
   }, [state.status]);
 
-  const currentQuestion = state.questions[state.currentIndex];
+  const rawQuestion = state.questions[state.displayIndex];
+  if (rawQuestion && !lockedQuestionRef.current) {
+    lockedQuestionRef.current = rawQuestion;
+  }
+  const currentQuestion = lockedQuestionRef.current ?? rawQuestion;
 
   const handleSelect = async (answer: string) => {
-    if (submitting || feedback) return;
+    if (submitting || feedback || !currentQuestion) return;
+    isAnsweringRef.current = true;
     setSelectedAnswer(answer);
     setSubmitting(true);
 
@@ -152,15 +179,51 @@ export default function DailyQuizPage() {
   };
 
   const handleNext = async () => {
-    if (state.currentIndex >= state.readyCount) {
+    const nextDisplayIndex = state.displayIndex + 1;
+    if (nextDisplayIndex >= state.readyCount) {
       try {
         await fetch("/api/daily-quiz/complete", { method: "POST" });
       } catch {}
       router.push("/daily-quiz/report");
       return;
     }
+    lockedQuestionRef.current = null;
+    isAnsweringRef.current = false;
     setSelectedAnswer(null);
     setFeedback(null);
+    setState((prev) => ({
+      ...prev,
+      displayIndex: nextDisplayIndex,
+    }));
+  };
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    setShowRegenerateConfirm(false);
+    try {
+      const res = await fetch("/api/daily-quiz/regenerate", { method: "POST" });
+      const json = await res.json();
+      if (json.success) {
+        lockedQuestionRef.current = null;
+        isAnsweringRef.current = false;
+        setSelectedAnswer(null);
+        setFeedback(null);
+        setElapsed(0);
+        setState({
+          status: json.data.quiz.status,
+          questions: json.data.quiz.questions,
+          readyCount: json.data.quiz.readyCount,
+          total: json.data.quiz.totalCount,
+          currentIndex: 0,
+          correctCount: 0,
+          displayIndex: 0,
+        });
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -217,7 +280,7 @@ export default function DailyQuizPage() {
     );
   }
 
-  const displayIndex = Math.min(state.currentIndex, state.readyCount - 1);
+  const displayIndex = Math.min(state.displayIndex, state.readyCount - 1);
 
   return (
     <>
@@ -228,11 +291,48 @@ export default function DailyQuizPage() {
         <span className="text-sm font-medium text-gray-700">
           {displayIndex + 1}/{state.readyCount}
         </span>
-        <span className="flex items-center gap-1 text-sm text-gray-500">
-          <Clock className="h-4 w-4" />
-          {formatTime(elapsed)}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowRegenerateConfirm(true)}
+            disabled={regenerating}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+            title="换一套题"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", regenerating && "animate-spin")} />
+          </button>
+          <span className="flex items-center gap-1 text-sm text-gray-500">
+            <Clock className="h-4 w-4" />
+            {formatTime(elapsed)}
+          </span>
+        </div>
       </header>
+
+      {showRegenerateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <p className="mb-2 text-base font-semibold text-gray-800 dark:text-gray-200">
+              确认换一套题？
+            </p>
+            <p className="mb-5 text-sm text-gray-500">
+              当前答题进度将清零，系统会重新为你生成一套新题目。
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRegenerateConfirm(false)}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRegenerate}
+                className="flex-1 rounded-xl bg-blue-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-600"
+              >
+                确认换题
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <PageContainer>
         <div className="space-y-6">
@@ -300,16 +400,15 @@ export default function DailyQuizPage() {
               onClick={handleNext}
               className="w-full rounded-xl bg-blue-500 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-600"
             >
-              {state.currentIndex >= state.readyCount ? "查看报告" : "下一题"}
+              {state.displayIndex + 1 >= state.readyCount ? "查看报告" : "下一题"}
             </button>
           )}
         </div>
 
-        {/* Progress bar */}
         <div className="fixed bottom-0 left-0 right-0 h-1 bg-gray-100">
           <div
             className="h-full bg-blue-500 transition-all duration-300"
-            style={{ width: `${(state.currentIndex / state.readyCount) * 100}%` }}
+            style={{ width: `${((state.displayIndex + (feedback ? 1 : 0)) / state.readyCount) * 100}%` }}
           />
         </div>
       </PageContainer>
