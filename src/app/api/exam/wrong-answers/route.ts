@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const category = req.nextUrl.searchParams.get("category") ?? undefined;
-    const items = await WrongAnswerService.list(userId, category);
+    const full = req.nextUrl.searchParams.get("full") === "true";
+
+    const items = full
+      ? await WrongAnswerService.listFull(userId, category)
+      : await WrongAnswerService.list(userId, category);
     return NextResponse.json({ success: true, data: items });
   } catch (err) {
     const message = err instanceof Error ? err.message : "服务器错误";

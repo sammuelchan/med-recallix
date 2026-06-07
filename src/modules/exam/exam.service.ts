@@ -95,13 +95,13 @@ export const ExamService = {
           type?: string;
         }>;
 
-        const uniqueCategories = kps.map((kp) => kp.category);
+        const sampledCategories = sampledKps.map((kp) => kp.category);
         const aiQuestions: ExamQuestion[] = raw.map((q, i) => ({
           id: generateId(),
           question: q.question,
           referenceAnswer: q.referenceAnswer,
           source: "ai" as const,
-          category: uniqueCategories[i % uniqueCategories.length] ?? [],
+          category: sampledCategories[i % sampledCategories.length] ?? [],
         }));
 
         const combined = [...userQuestions, ...aiQuestions];

@@ -13,24 +13,21 @@ import {
   ChevronUp,
   ArrowLeft,
   AlertTriangle,
-  Loader2,
 } from "lucide-react";
-import type { WrongAnswerIndexItem, WrongAnswer } from "@/modules/exam";
+import type { WrongAnswer } from "@/modules/exam";
 
 export default function WrongAnswersPage() {
   const router = useRouter();
-  const [items, setItems] = useState<WrongAnswerIndexItem[]>([]);
+  const [items, setItems] = useState<WrongAnswer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [expandedDetail, setExpandedDetail] = useState<WrongAnswer | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
 
   const fetchList = useCallback(async () => {
     try {
-      const res = await fetch("/api/exam/wrong-answers");
+      const res = await fetch("/api/exam/wrong-answers?full=true");
       const json = await res.json();
       if (json.success) setItems(json.data);
     } catch { /* silent */ }
@@ -48,36 +45,26 @@ export default function WrongAnswersPage() {
   }, [items]);
 
   const filtered = useMemo(() => {
-    if (!selectedCategory) return items;
-    return items.filter((item) => item.category[0] === selectedCategory);
+    let result = items;
+    if (selectedCategory) {
+      result = result.filter((item) => item.category[0] === selectedCategory);
+    }
+    return result.sort((a, b) => {
+      if (b.wrongCount !== a.wrongCount) return b.wrongCount - a.wrongCount;
+      return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+    });
   }, [items, selectedCategory]);
 
-  const toggleExpand = useCallback(async (id: string) => {
-    if (expandedId === id) {
-      setExpandedId(null);
-      setExpandedDetail(null);
-      return;
-    }
-    setExpandedId(id);
-    setExpandedDetail(null);
-    setLoadingDetail(true);
-    try {
-      const res = await fetch(`/api/exam/wrong-answers/${id}`);
-      const json = await res.json();
-      if (json.success) setExpandedDetail(json.data);
-    } catch { /* silent */ }
-    setLoadingDetail(false);
-  }, [expandedId]);
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedId((prev) => prev === id ? null : id);
+  }, []);
 
   const handleDelete = useCallback(async (id: string) => {
     setDeleting(id);
     try {
       await fetch(`/api/exam/wrong-answers/${id}`, { method: "DELETE" });
       setItems((prev) => prev.filter((item) => item.id !== id));
-      if (expandedId === id) {
-        setExpandedId(null);
-        setExpandedDetail(null);
-      }
+      if (expandedId === id) setExpandedId(null);
     } catch { /* silent */ }
     setDeleting(null);
   }, [expandedId]);
@@ -89,7 +76,6 @@ export default function WrongAnswersPage() {
       await fetch("/api/exam/wrong-answers", { method: "DELETE" });
       setItems([]);
       setExpandedId(null);
-      setExpandedDetail(null);
     } catch { /* silent */ }
     setClearing(false);
   }, []);
@@ -191,6 +177,7 @@ export default function WrongAnswersPage() {
             <div className="space-y-2">
               {filtered.map((item) => {
                 const isExpanded = expandedId === item.id;
+                const overallScore = item.evaluation?.overall ?? 0;
                 return (
                   <div key={item.id} className="rounded-xl border overflow-hidden">
                     <button
@@ -211,8 +198,8 @@ export default function WrongAnswersPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", scoreColor(item.overallScore))}>
-                          {item.overallScore}分
+                        <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", scoreColor(overallScore))}>
+                          {overallScore}分
                         </span>
                         {isExpanded ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
                       </div>
@@ -220,75 +207,63 @@ export default function WrongAnswersPage() {
 
                     {isExpanded && (
                       <div className="border-t px-4 py-3 space-y-3 bg-muted/10">
-                        {loadingDetail ? (
-                          <div className="flex justify-center py-4">
-                            <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                          </div>
-                        ) : expandedDetail ? (
-                          <>
-                            <div className="space-y-1.5">
-                              <p className="text-xs font-medium text-muted-foreground">你的回答</p>
-                              <p className="text-sm whitespace-pre-wrap bg-red-50/50 dark:bg-red-950/20 rounded-lg p-3 border border-red-100 dark:border-red-900/30">
-                                {expandedDetail.userAnswer}
-                              </p>
-                            </div>
+                        <div className="space-y-1.5">
+                          <p className="text-xs font-medium text-muted-foreground">你的回答</p>
+                          <p className="text-sm whitespace-pre-wrap bg-red-50/50 dark:bg-red-950/20 rounded-lg p-3 border border-red-100 dark:border-red-900/30">
+                            {item.userAnswer}
+                          </p>
+                        </div>
 
-                            <div className="space-y-1.5">
-                              <p className="text-xs font-medium text-green-600 dark:text-green-400">参考答案</p>
-                              <p className="text-sm whitespace-pre-wrap bg-green-50/50 dark:bg-green-950/20 rounded-lg p-3 border border-green-100 dark:border-green-900/30">
-                                {expandedDetail.referenceAnswer}
-                              </p>
-                            </div>
+                        <div className="space-y-1.5">
+                          <p className="text-xs font-medium text-green-600 dark:text-green-400">参考答案</p>
+                          <p className="text-sm whitespace-pre-wrap bg-green-50/50 dark:bg-green-950/20 rounded-lg p-3 border border-green-100 dark:border-green-900/30">
+                            {item.referenceAnswer}
+                          </p>
+                        </div>
 
-                            {expandedDetail.evaluation && (
-                              <div className="space-y-2">
-                                <div className="flex gap-4 text-xs">
-                                  <span>相似度: <strong>{expandedDetail.evaluation.similarity}</strong></span>
-                                  <span>完整度: <strong>{expandedDetail.evaluation.completeness}</strong></span>
-                                  <span>综合: <strong>{expandedDetail.evaluation.overall}</strong></span>
-                                </div>
-                                {expandedDetail.evaluation.feedback && (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    {expandedDetail.evaluation.feedback}
-                                  </p>
-                                )}
-                                {expandedDetail.evaluation.missingPoints.length > 0 && (
-                                  <div>
-                                    <p className="text-xs font-medium text-orange-600 dark:text-orange-400 flex items-center gap-1">
-                                      <AlertTriangle className="size-3" />
-                                      遗漏要点
-                                    </p>
-                                    <ul className="text-xs text-muted-foreground ml-4 mt-1 list-disc space-y-0.5">
-                                      {expandedDetail.evaluation.missingPoints.map((p, i) => (
-                                        <li key={i}>{p}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
+                        {item.evaluation && (
+                          <div className="space-y-2">
+                            <div className="flex gap-4 text-xs">
+                              <span>相似度: <strong>{item.evaluation.similarity}</strong></span>
+                              <span>完整度: <strong>{item.evaluation.completeness}</strong></span>
+                              <span>综合: <strong>{item.evaluation.overall}</strong></span>
+                            </div>
+                            {item.evaluation.feedback && (
+                              <p className="text-xs text-muted-foreground italic">
+                                {item.evaluation.feedback}
+                              </p>
+                            )}
+                            {item.evaluation.missingPoints.length > 0 && (
+                              <div>
+                                <p className="text-xs font-medium text-orange-600 dark:text-orange-400 flex items-center gap-1">
+                                  <AlertTriangle className="size-3" />
+                                  遗漏要点
+                                </p>
+                                <ul className="text-xs text-muted-foreground ml-4 mt-1 list-disc space-y-0.5">
+                                  {item.evaluation.missingPoints.map((p, i) => (
+                                    <li key={i}>{p}</li>
+                                  ))}
+                                </ul>
                               </div>
                             )}
-
-                            <div className="flex justify-end pt-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(item.id);
-                                }}
-                                disabled={deleting === item.id}
-                                className="text-xs text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="size-3 mr-1" />
-                                {deleting === item.id ? "删除中..." : "移除"}
-                              </Button>
-                            </div>
-                          </>
-                        ) : (
-                          <p className="text-sm text-muted-foreground text-center py-2">
-                            加载失败
-                          </p>
+                          </div>
                         )}
+
+                        <div className="flex justify-end pt-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(item.id);
+                            }}
+                            disabled={deleting === item.id}
+                            className="text-xs text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="size-3 mr-1" />
+                            {deleting === item.id ? "删除中..." : "移除"}
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>

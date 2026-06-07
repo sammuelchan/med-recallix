@@ -6,7 +6,7 @@
  * Duplicate questions (same question text) are merged, incrementing wrongCount.
  */
 
-import { kvGet, kvPut, kvDelete, kvKeys } from "@/shared/infrastructure/kv";
+import { kvGet, kvBatchGet, kvPut, kvDelete, kvKeys } from "@/shared/infrastructure/kv";
 import { generateId } from "@/shared/lib/utils";
 import type { WrongAnswer, WrongAnswerIndexItem, ExamEvaluation } from "./exam.types";
 
@@ -109,6 +109,15 @@ export const WrongAnswerService = {
       if (b.wrongCount !== a.wrongCount) return b.wrongCount - a.wrongCount;
       return b.updatedAt.localeCompare(a.updatedAt);
     });
+  },
+
+  async listFull(userId: string, category?: string): Promise<WrongAnswer[]> {
+    const index = await this.list(userId, category);
+    if (index.length === 0) return [];
+
+    const keys = index.map((item) => kvKeys.wrongAnswer(userId, item.id));
+    const records = await kvBatchGet<WrongAnswer>(keys);
+    return records.filter((r): r is WrongAnswer => r !== null);
   },
 
   async get(userId: string, wrongId: string): Promise<WrongAnswer | null> {
