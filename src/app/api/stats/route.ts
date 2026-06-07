@@ -47,6 +47,18 @@ export async function GET(req: NextRequest) {
     const newCards = cardIndex.filter((c) => c.repetition === 0).length;
     const dueToday = cardIndex.filter((c) => c.dueDate <= today).length;
 
+    // Weighted progress: each card contributes proportionally to its learning stage
+    let progressScore = 0;
+    for (const c of cardIndex) {
+      if (c.repetition >= 3 && c.efactor >= 2.5) progressScore += 1;
+      else if (c.repetition >= 3) progressScore += 0.75;
+      else if (c.repetition === 2) progressScore += 0.5;
+      else if (c.repetition === 1) progressScore += 0.25;
+    }
+    const masteryPercent = totalCards > 0
+      ? Math.round((progressScore / totalCards) * 100)
+      : 0;
+
     const todayEpisode = episodes[episodes.length - 1];
     const recentDays = dates.map((date, idx) => ({
       date,
@@ -63,6 +75,7 @@ export async function GET(req: NextRequest) {
         learning,
         newCards,
         dueToday,
+        masteryPercent,
         streak,
         todayEpisode,
         recentDays,

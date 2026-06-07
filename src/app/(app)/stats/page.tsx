@@ -14,6 +14,7 @@ interface StatsData {
   learning: number;
   newCards: number;
   dueToday: number;
+  masteryPercent: number;
   streak: StreakData;
   todayEpisode: DailyEpisode | null;
   recentDays: { date: string; count: number; minutes: number }[];
@@ -101,8 +102,7 @@ export default function StatsPage() {
     );
   }
 
-  const masteryPercent =
-    data.totalCards > 0 ? Math.round((data.mastered / data.totalCards) * 100) : 0;
+  const masteryPercent = data.masteryPercent;
 
   const isEmpty = data.totalKP === 0 && data.totalCards === 0 && data.streak.totalReviews === 0;
 
@@ -163,16 +163,19 @@ export default function StatsPage() {
               icon={<BookOpen className="size-4 text-blue-500" />}
               value={data.totalKP}
               label="知识点"
+              href="/knowledge"
             />
             <MiniCard
               icon={<Brain className="size-4 text-green-500" />}
               value={data.mastered}
               label="已掌握"
+              href="/knowledge"
             />
             <MiniCard
               icon={<TrendingUp className="size-4 text-orange-500" />}
               value={data.dueToday}
               label="今日待复习"
+              href="/review"
             />
           </div>
 
@@ -256,18 +259,25 @@ function MiniCard({
   icon,
   value,
   label,
+  href,
 }: {
   icon: React.ReactNode;
   value: number;
   label: string;
+  href?: string;
 }) {
-  return (
-    <div className="flex flex-col items-center gap-1 rounded-xl border p-3">
+  const content = (
+    <div className="flex flex-col items-center gap-1 rounded-xl border p-3 transition-colors hover:bg-muted/50">
       {icon}
       <span className="text-lg font-bold">{value}</span>
       <span className="text-[11px] text-muted-foreground">{label}</span>
     </div>
   );
+
+  if (href) {
+    return <Link href={href}>{content}</Link>;
+  }
+  return content;
 }
 
 function RotateIcon() {

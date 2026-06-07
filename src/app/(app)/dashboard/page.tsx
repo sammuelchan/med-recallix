@@ -74,21 +74,25 @@ export default function DashboardPage() {
               value={summary?.due ?? 0}
               label="待复习"
               color="text-primary"
+              href="/review"
             />
             <StatCard
               value={summary?.overdue ?? 0}
               label="已逾期"
               color="text-orange-500"
+              href="/review"
             />
             <StatCard
               value={summary?.newToday ?? 0}
               label="新卡片"
               color="text-green-500"
+              href="/review"
             />
             <StatCard
               value={streak?.totalReviews ?? 0}
               label="总复习次数"
               color="text-foreground"
+              href="/stats"
             />
           </div>
 
@@ -131,15 +135,22 @@ function StatCard({
   value,
   label,
   color,
+  href,
 }: {
   value: number;
   label: string;
   color: string;
+  href?: string;
 }) {
-  return (
-    <div className="rounded-xl border p-4 text-center">
+  const content = (
+    <div className="rounded-xl border p-4 text-center transition-colors hover:bg-muted/50">
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
       <p className="text-xs text-muted-foreground mt-1">{label}</p>
     </div>
   );
+
+  if (href) {
+    return <Link href={href}>{content}</Link>;
+  }
+  return content;
 }
