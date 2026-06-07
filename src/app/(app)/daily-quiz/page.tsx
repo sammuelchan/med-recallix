@@ -7,6 +7,15 @@ import { Header, PageContainer } from "@/shared/components/layout";
 import { cn } from "@/shared/lib/utils";
 import type { DailyQuizQuestion, DailyQuizStatus } from "@/modules/daily-quiz";
 
+/**
+ * 答题状态设计:
+ * - displayIndex: 当前展示给用户的题目索引（仅用户点"下一题"才递增）
+ * - currentIndex: 服务端 progress 的已答题数（提交答案后立即更新）
+ * - readyCount: 后端已生成的题目数（随 COW 异步补全递增）
+ * - total: 总目标题数（50）
+ *
+ * 分离 displayIndex 和 currentIndex 是防止跳题的核心设计。
+ */
 interface QuizState {
   status: DailyQuizStatus | null;
   questions: DailyQuizQuestion[];
@@ -41,7 +50,10 @@ export default function DailyQuizPage() {
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 题目锁: 一旦展示某题，锁定其引用直到用户点击"下一题"
+  // 防止轮询追加题目或 state 更新导致当前展示的题目发生变化
   const lockedQuestionRef = useRef<DailyQuizQuestion | null>(null);
+  // 答题中标志: 为 true 时暂停轮询，避免并发 state 更新
   const isAnsweringRef = useRef(false);
 
   const fetchQuiz = useCallback(async () => {
@@ -140,6 +152,9 @@ export default function DailyQuizPage() {
     };
   }, [state.status]);
 
+  // ─── 题目锁定机制 ─────────────────────────────────────────
+  // 每次 displayIndex 变化后首次遇到有效 question 时锁定。
+  // 锁定后即使 questions 数组被轮询更新，当前展示的题目也不变。
   const rawQuestion = state.questions[state.displayIndex];
   if (rawQuestion && !lockedQuestionRef.current) {
     lockedQuestionRef.current = rawQuestion;

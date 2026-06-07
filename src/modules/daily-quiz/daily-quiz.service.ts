@@ -25,6 +25,10 @@ import type {
 import type { KnowledgePoint } from "@/modules/knowledge";
 import type { KPIndexItem } from "@/modules/knowledge";
 
+// ─── Generation Strategy Constants ──────────────────────────────────────────
+// FIRST_BATCH: 首批同步生成的题目数，用户等待此批完成后即可开始答题
+// TARGET_TOTAL: 总目标题数，首批完成后通过 COW 异步补全到此数量
+// 算法: 用户答前 20 题时，后台 copy-on-write 补全到 50 题，写完后原子替换
 const FIRST_BATCH = 20;
 const TARGET_TOTAL = 50;
 const MIN_KP_COUNT = 1;
@@ -32,6 +36,10 @@ const MAX_CACHE_SIZE = 500;
 const ERROR_WEIGHT_MAX_SIZE = 100;
 
 export const DailyQuizService = {
+  /**
+   * 获取今日 quiz 状态。并行读取 quiz/progress/result 三个 KV key。
+   * 附带 fire-and-forget 清理过期数据（不阻塞响应）。
+   */
   async getTodayQuiz(userId: string): Promise<{
     status: DailyQuizSet["status"] | null;
     quiz: DailyQuizSet | null;
@@ -45,7 +53,6 @@ export const DailyQuizService = {
       kvGet<DailyQuizResult>(kvKeys.dailyQuizResult(userId, today)),
     ]);
 
-    // Async cleanup of expired records + audit logs (fire-and-forget, non-blocking)
     this.cleanupExpiredRecords(userId).catch(() => {});
     DailyQuizAuditService.cleanupExpiredLogs(userId).catch(() => {});
 
@@ -57,6 +64,17 @@ export const DailyQuizService = {
     };
   },
 
+  /**
+   * 生成今日 quiz 首批题目。
+   *
+   * 算法流程:
+   * 1. 幂等检查: 若今日已存在非 generating 状态的 quiz，直接返回
+   * 2. 知识点选取: 按错题权重 > 薄弱区 > 新覆盖的优先级选取
+   * 3. 首批生成: 同步生成 FIRST_BATCH(20) 题，写入 KV
+   * 4. 异步续生: 若未达 TARGET_TOTAL，fire-and-forget 调用 continueGeneration
+   *
+   * 用户只需等待首批完成即可开始答题。
+   */
   async generateDailyQuiz(userId: string): Promise<DailyQuizSet> {
     const today = toISODateString();
     const existing = await kvGet<DailyQuizSet>(kvKeys.dailyQuiz(userId, today));
@@ -102,12 +120,29 @@ export const DailyQuizService = {
     if (quizSet.status === "ready") {
       DailyQuizAuditService.append(userId, "generate_complete", `生成完成，共 ${quizSet.readyCount} 题`, { questionCount: quizSet.readyCount }).catch(() => {});
     } else if (quizSet.status === "partial" && quizSet.readyCount >= FIRST_BATCH) {
+      // Fire-and-forget: 后台异步补全剩余题目
       this.continueGeneration(userId).catch(() => {});
     }
 
     return quizSet;
   },
 
+  /**
+   * Copy-on-Write 续生题目。
+   *
+   * 核心算法:
+   * 1. 读取当前 quizSet 快照（此时用户可能正在答题）
+   * 2. 在内存中 COPY 出新的 questions 数组
+   * 3. 对副本追加新生成的题目（不影响正在读取的原数据）
+   * 4. 原子 WRITE: 一次性将完整新数组写回 KV
+   *
+   * 为什么用 COW:
+   * - 用户答题时读取 questions[displayIndex]，此操作不加锁
+   * - 续生过程可能耗时 10-30s，期间 questions 引用不能被修改
+   * - COW 保证: 读者看到的要么是旧快照，要么是完整的新快照，不会看到中间态
+   *
+   * 降级策略: AI 生成失败时从缓存池取历史题目填充
+   */
   async continueGeneration(userId: string): Promise<DailyQuizSet> {
     const today = toISODateString();
     const quizSet = await kvGet<DailyQuizSet>(kvKeys.dailyQuiz(userId, today));
@@ -137,6 +172,9 @@ export const DailyQuizService = {
 
     DailyQuizAuditService.append(userId, "continue_start", `继续生成，已有 ${quizSet.readyCount} 题，剩余 ${remaining} 题`).catch(() => {});
 
+    // ─── COW: 复制当前题目数组，在副本上操作 ───────────────────
+    const snapshot = [...quizSet.questions];
+
     try {
       const batchSize = Math.min(remaining, 20);
       const startTime = Date.now();
@@ -148,31 +186,28 @@ export const DailyQuizService = {
       );
       const durationMs = Date.now() - startTime;
 
-      quizSet.questions.push(...newQuestions);
-      if (quizSet.questions.length > TARGET_TOTAL) {
-        quizSet.questions = quizSet.questions.slice(0, TARGET_TOTAL);
-      }
-      quizSet.readyCount = quizSet.questions.length;
-      quizSet.status = quizSet.readyCount >= TARGET_TOTAL ? "ready" : "partial";
+      // 追加到副本而非原数组
+      snapshot.push(...newQuestions);
 
-      DailyQuizAuditService.append(userId, "continue_ok", `续批生成 ${newQuestions.length} 题，累计 ${quizSet.readyCount}/${TARGET_TOTAL}`, { questionCount: newQuestions.length, durationMs }).catch(() => {});
+      DailyQuizAuditService.append(userId, "continue_ok", `续批生成 ${newQuestions.length} 题，累计 ${snapshot.length}/${TARGET_TOTAL}`, { questionCount: newQuestions.length, durationMs }).catch(() => {});
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       DailyQuizAuditService.append(userId, "continue_fail", `续批生成失败，尝试缓存降级`, { error: errorMsg }).catch(() => {});
 
       const fallback = await this.getFallbackQuestions(userId, remaining);
       if (fallback.length > 0) {
-        quizSet.questions.push(...fallback);
-        quizSet.readyCount = quizSet.questions.length;
+        snapshot.push(...fallback);
         DailyQuizAuditService.append(userId, "generate_fallback", `缓存降级成功，补充 ${fallback.length} 题`, { questionCount: fallback.length }).catch(() => {});
       } else {
         DailyQuizAuditService.append(userId, "generate_fallback", `缓存降级失败，缓存池为空`).catch(() => {});
       }
-      // Only mark ready if we have at least some questions
-      if (quizSet.readyCount > 0) {
-        quizSet.status = "ready";
-      }
     }
+
+    // ─── COW: 原子写入 — 用完整副本一次性替换 ────────────────────
+    const finalQuestions = snapshot.slice(0, TARGET_TOTAL);
+    quizSet.questions = finalQuestions;
+    quizSet.readyCount = finalQuestions.length;
+    quizSet.status = quizSet.readyCount >= TARGET_TOTAL ? "ready" : (quizSet.readyCount > 0 ? "partial" : quizSet.status);
 
     await kvPut(kvKeys.dailyQuiz(userId, today), quizSet);
 
@@ -183,6 +218,14 @@ export const DailyQuizService = {
     return quizSet;
   },
 
+  /**
+   * 提交答案。通过 questionId 定位题目，比对答案，更新 progress。
+   *
+   * 设计要点:
+   * - currentIndex = 已答题数（answers map 的 size），不依赖前端传入
+   * - 首次答题时将 quiz status 从 ready/partial → in_progress（仅一次写入）
+   * - 错题权重更新是 fire-and-forget，不阻塞响应
+   */
   async submitAnswer(
     userId: string,
     questionId: string,
@@ -248,6 +291,10 @@ export const DailyQuizService = {
     };
   },
 
+  /**
+   * 换一套题: 清除当日 quiz 和 progress，重新走 generateDailyQuiz 流程。
+   * 已完成的练习不允许重新生成（防止刷分）。
+   */
   async regenerateQuiz(userId: string): Promise<DailyQuizSet> {
     const today = toISODateString();
     const existing = await kvGet<DailyQuizSet>(kvKeys.dailyQuiz(userId, today));
@@ -336,6 +383,15 @@ export const DailyQuizService = {
 
   // ─── Internal Methods ────────────────────────────────────────
 
+  /**
+   * 知识点选取算法。三层优先级:
+   *
+   * 1. errorReview (最多10): 错题权重表中未毕业、权重>0 的 KP，按权重降序
+   * 2. weakArea (最多8): SM-2 中 efactor<2.0 且已复习≥1次的薄弱 KP
+   * 3. newCoverage (最多10): 未被复习卡覆盖的新 KP，保证题目多样性
+   *
+   * 兜底: 若三层总和不足 min(8, kpIndex.length)，随机补充至阈值
+   */
   async selectKnowledgePoints(
     userId: string,
     kpIndex: KPIndexItem[],
@@ -398,6 +454,17 @@ export const DailyQuizService = {
     };
   },
 
+  /**
+   * 批量生成题目。两阶段管线:
+   *
+   * Phase 1 (零延迟): 从 KP 内置的 QA 问答对直接转为选择题
+   * Phase 2 (AI 调用): 不足部分通过 LLM 生成，含严格校验
+   *
+   * 校验规则: stem/options/answer/explanation 必须完整，
+   * answer 必须是 A-E 且对应 option 存在，options ≥ 4 个
+   *
+   * 降级链: QA 直接生成 → AI 生成 → 缓存池取历史题
+   */
   async generateBatch(
     userId: string,
     kpIds: string[],
@@ -628,6 +695,14 @@ export const DailyQuizService = {
     }));
   },
 
+  /**
+   * 错题权重更新。LRU 策略管理权重表（上限 ERROR_WEIGHT_MAX_SIZE=100）。
+   *
+   * 答错: 已有条目 → incrementError; 新条目 → 创建并加入（满则 LRU 淘汰）
+   * 答对: 已有条目 → incrementCorrect（连续正确可毕业）
+   *
+   * 权重计算公式见 daily-quiz.weight.ts
+   */
   async updateErrorWeight(
     userId: string,
     question: DailyQuizQuestion,
