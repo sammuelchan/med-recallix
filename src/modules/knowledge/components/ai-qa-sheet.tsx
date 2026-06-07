@@ -61,13 +61,13 @@ function detectQAPairs(text: string): ParsedQA[] {
 
 function buildSystemPrompt(title: string, category: string): string {
   const ctx = title || category
-    ? `（知识点：${category ? category + "/" : ""}${title || "未命名"}）`
+    ? `（${category ? category + "/" : ""}${title || ""}）`
     : "";
   return ctx;
 }
 
 function buildMessage(text: string, ctx: string): string {
-  return `${ctx}用Q:/A:格式，答案一句话精简。${text}`;
+  return `${ctx}Q:/A:格式,答案精简一句话。${text}`;
 }
 
 export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetProps) {
@@ -233,10 +233,17 @@ export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetPro
         {/* Messages */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3">
           {messages.length === 0 && (
-            <div className="text-center py-8 text-sm text-muted-foreground space-y-2">
-              <p>AI 帮你快速生成问答对</p>
+            <div className="text-center py-6 text-sm text-muted-foreground space-y-3">
+              <p>快速生成精简问答对</p>
               <div className="flex flex-wrap gap-1.5 justify-center">
-                {["生成5个核心问答", "出3道易错题", "生成填空题"].map((s) => (
+                {[
+                  "生成5个核心问答",
+                  "出3道易错题",
+                  "生成填空题",
+                  "对比辨析题",
+                  "临床场景题",
+                  "名词解释",
+                ].map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -270,7 +277,7 @@ export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetPro
           {/* Expand suggestions after AI responds */}
           {detectedPairs.length > 0 && !isStreaming && (
             <div className="flex flex-wrap gap-1.5 justify-center pt-1">
-              {["扩展答案详情", "再来5个", "换个角度出题"].map((s) => (
+              {["扩展答案", "再来5个", "换角度出题", "增加难度", "简化为判断题"].map((s) => (
                 <button
                   key={s}
                   type="button"

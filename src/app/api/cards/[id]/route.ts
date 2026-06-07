@@ -1,8 +1,8 @@
 /**
- * Card Grade API Route
+ * Card API Route
  *
- * PUT /api/cards/:id → submit SM-2 grade (0–5) for a specific card.
- * Advances the card's spaced repetition state and returns updated card.
+ * PUT   /api/cards/:id → submit SM-2 grade (0–5) for a specific card.
+ * PATCH /api/cards/:id → reset card's due date to today for immediate re-review.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -30,6 +30,23 @@ export async function PUT(
     if (err instanceof Error && err.name === "ZodError") {
       return NextResponse.json({ success: false, error: "评分格式有误" }, { status: 400 });
     }
+    return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const userId = await getUserId(req);
+    if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
+
+    const { id } = await params;
+    await ReviewService.resetCardDueDate(userId, id);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    if (err instanceof AppError) return NextResponse.json(err.toJSON(), { status: err.status });
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
   }
 }

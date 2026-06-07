@@ -307,4 +307,24 @@ export const ReviewService = {
     const index = await this.getCardIndex(userId);
     return index.length;
   },
+
+  /** Reset a card's due date to today so it can be reviewed immediately. */
+  async resetCardDueDate(userId: string, cardId: string): Promise<void> {
+    const today = toISODateString();
+    const [card, index] = await Promise.all([
+      this.getCard(userId, cardId),
+      this.getCardIndex(userId),
+    ]);
+
+    if (!card) throw new NotFoundError("卡片");
+
+    card.dueDate = today;
+    const indexItem = index.find((c) => c.id === cardId);
+    if (indexItem) indexItem.dueDate = today;
+
+    await Promise.all([
+      kvPut(kvKeys.card(userId, cardId), card),
+      kvPut(kvKeys.deckIndex(userId), index),
+    ]);
+  },
 };

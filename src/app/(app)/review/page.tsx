@@ -95,6 +95,24 @@ export default function ReviewPage() {
     remembered: number;
   } | null>(null);
 
+  // Reset state
+  const [resetting, setResetting] = useState(false);
+
+  const handleResetAllToday = useCallback(async () => {
+    setResetting(true);
+    try {
+      const cardIds = cards.length > 0 ? cards.map((c) => c.id) : undefined;
+      await fetch("/api/cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardIds }),
+      });
+      window.location.reload();
+    } catch {
+      setResetting(false);
+    }
+  }, [cards]);
+
   useEffect(() => {
     fetch("/api/cards")
       .then((r) => r.json())
@@ -236,10 +254,19 @@ export default function ReviewPage() {
       <>
         <Header title="复习" />
         <PageContainer className="flex items-center justify-center">
-          <div className="text-center text-muted-foreground">
+          <div className="text-center text-muted-foreground space-y-3">
             <p className="text-4xl mb-4">📚</p>
             <p>暂无待复习的卡片</p>
             <p className="text-sm mt-1">先去添加知识点吧</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResetAllToday}
+              disabled={resetting}
+            >
+              <RotateCcw className="size-3.5 mr-1" />
+              {resetting ? "重置中..." : "重新复习今天的卡片"}
+            </Button>
           </div>
         </PageContainer>
       </>
@@ -258,9 +285,19 @@ export default function ReviewPage() {
             <p className="text-muted-foreground">
               你今天复习了 {reviewed} 个知识点
             </p>
-            <Button onClick={() => router.push("/dashboard")}>
-              返回首页
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button onClick={() => router.push("/dashboard")}>
+                返回首页
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleResetAllToday}
+                disabled={resetting}
+              >
+                <RotateCcw className="size-4 mr-1.5" />
+                {resetting ? "重置中..." : "再来一轮"}
+              </Button>
+            </div>
           </div>
         </PageContainer>
       </>
