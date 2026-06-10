@@ -17,9 +17,25 @@
 
 import { getFileKV } from "./kv.local";
 
-/* ─── In-memory read-through cache (short TTL) ─── */
+/*
+ * ─── In-memory read-through cache (short TTL) ───
+ *
+ * Mitigates the high latency of the KV HTTP proxy adapter in production,
+ * where each kvGet triggers a full network round-trip to the EdgeOne
+ * Edge Function (often 1–3 s due to cold starts).
+ *
+ * Strategy:
+ *   - Read-through: on cache miss, fetch from backend and populate cache.
+ *   - Write-through: kvPut updates cache immediately after persisting.
+ *   - Invalidate-on-delete: kvDelete evicts the key from cache.
+ *   - Lazy eviction: expired entries are purged on access; a full sweep
+ *     runs when the cache exceeds 500 entries to cap memory usage.
+ *
+ * The TTL is intentionally short (10 s) to balance latency reduction
+ * against data freshness for single-instance deployments.
+ */
 
-const DEFAULT_CACHE_TTL_MS = 10_000; // 10 seconds
+const DEFAULT_CACHE_TTL_MS = 10_000;
 
 interface CacheEntry {
   value: string | null;
@@ -28,6 +44,7 @@ interface CacheEntry {
 
 const readCache = new Map<string, CacheEntry>();
 
+/** Returns the cached raw JSON string, null (cached negative), or undefined (miss). */
 function cacheGet(key: string): string | null | undefined {
   const entry = readCache.get(key);
   if (!entry) return undefined;

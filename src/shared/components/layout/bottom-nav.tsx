@@ -37,12 +37,13 @@ export function BottomNav() {
       <div className="mx-auto flex h-14 max-w-lg items-center justify-around px-2">
         {NAV_ITEMS.map(({ href, icon: Icon, label, prefetchUrl }) => {
           const isActive = pathname.startsWith(href);
+          const shouldPrefetch = prefetchUrl && !isActive;
           return (
             <Link
               key={href}
               href={href}
-              onTouchStart={() => prefetchUrl && prefetch(prefetchUrl)}
-              onMouseEnter={() => prefetchUrl && prefetch(prefetchUrl)}
+              onTouchStart={() => shouldPrefetch && prefetch(prefetchUrl)}
+              onMouseEnter={() => shouldPrefetch && prefetch(prefetchUrl)}
               className={cn(
                 "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-xs transition-colors",
                 isActive

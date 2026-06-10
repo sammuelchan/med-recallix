@@ -3,6 +3,12 @@
  *
  * GET  /api/knowledge            → list knowledge point index (optional category filter)
  * POST /api/knowledge            → create knowledge point + auto-add review card
+ *
+ * Performance: GET responses carry Cache-Control (private, max-age=5s,
+ * stale-while-revalidate=30s) to avoid redundant round-trips on fast
+ * page navigations. Server-side KV reads are also covered by the
+ * in-memory read-through cache in kv.client.ts (10 s TTL).
+ * Slow requests (>1 s) emit a console.warn for monitoring.
  */
 
 import { NextRequest, NextResponse } from "next/server";

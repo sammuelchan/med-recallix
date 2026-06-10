@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Header, PageContainer } from "@/shared/components/layout";
 import { Flame, BookOpen, Brain, Clock, TrendingUp, Trophy, Plus, RotateCcw, FileText } from "lucide-react";
@@ -8,7 +8,7 @@ import { cachedFetch } from "@/shared/lib/fetch-cache";
 import type { StreakData } from "@/modules/review";
 import type { DailyEpisode } from "@/modules/agent";
 
-interface StatsData {
+interface CoreData {
   totalKP: number;
   totalCards: number;
   mastered: number;
@@ -17,14 +17,22 @@ interface StatsData {
   dueToday: number;
   masteryPercent: number;
   streak: StreakData;
+}
+
+interface ChartData {
   todayEpisode: DailyEpisode | null;
   recentDays: { date: string; count: number; minutes: number }[];
-  dailyQuizStats?: {
-    recentResults: { date: string; accuracy: number | null; completed: boolean }[];
-    streak: number;
-    todayCompleted: boolean;
-    todayAccuracy: number | null;
-  };
+}
+
+interface QuizData {
+  recentResults: { date: string; accuracy: number | null; completed: boolean }[];
+  streak: number;
+  todayCompleted: boolean;
+  todayAccuracy: number | null;
+}
+
+function Skeleton({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`animate-pulse rounded-lg bg-muted ${className}`} style={style} />;
 }
 
 function gradeLabel(count: number): string {
@@ -32,7 +40,7 @@ function gradeLabel(count: number): string {
   return String(count);
 }
 
-function WeekChart({ days }: { days: StatsData["recentDays"] }) {
+function WeekChart({ days }: { days: ChartData["recentDays"] }) {
   const maxCount = Math.max(...days.map((d) => d.count), 1);
   const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -60,20 +68,113 @@ function WeekChart({ days }: { days: StatsData["recentDays"] }) {
   );
 }
 
+function WeekChartSkeleton() {
+  return (
+    <div className="rounded-2xl border p-4">
+      <Skeleton className="mb-3 h-4 w-28" />
+      <div className="flex items-end justify-between gap-1.5">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="flex flex-1 flex-col items-center gap-1">
+            <Skeleton className="h-3 w-4" />
+            <Skeleton className="w-full" style={{ height: `${20 + Math.random() * 50}px` }} />
+            <Skeleton className="h-3 w-4" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CoreStatsSkeleton() {
+  return (
+    <>
+      {/* Streak Banner Skeleton */}
+      <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 p-4 dark:from-orange-950/30 dark:to-amber-950/30">
+        <div className="flex items-center gap-3">
+          <Skeleton className="size-12 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-12" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        </div>
+        <div className="space-y-2 text-right">
+          <Skeleton className="ml-auto h-5 w-8" />
+          <Skeleton className="ml-auto h-3 w-14" />
+        </div>
+      </div>
+
+      {/* Stats Grid Skeleton */}
+      <div className="grid grid-cols-3 gap-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex flex-col items-center gap-1 rounded-xl border p-3">
+            <Skeleton className="size-4 rounded-full" />
+            <Skeleton className="h-6 w-8" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+        ))}
+      </div>
+
+      {/* Mastery Skeleton */}
+      <div className="rounded-2xl border p-4 space-y-2">
+        <div className="flex justify-between">
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-8" />
+        </div>
+        <Skeleton className="h-3 w-full rounded-full" />
+        <div className="flex justify-between">
+          <Skeleton className="h-3 w-14" />
+          <Skeleton className="h-3 w-14" />
+          <Skeleton className="h-3 w-14" />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function QuizStatsSkeleton() {
+  return (
+    <div className="rounded-2xl border p-4 space-y-3">
+      <Skeleton className="h-4 w-16" />
+      <div className="flex gap-3">
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-5 w-24" />
+      </div>
+      <div className="flex items-end gap-1">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="flex flex-1 flex-col items-center gap-1">
+            <Skeleton className="w-full" style={{ height: `${16 + Math.random() * 40}px` }} />
+            <Skeleton className="h-3 w-8" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function StatsPage() {
-  const [data, setData] = useState<StatsData | null>(null);
+  const [core, setCore] = useState<CoreData | null>(null);
+  const [chart, setChart] = useState<ChartData | null>(null);
+  const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    cachedFetch<{ success: boolean; data?: StatsData }>("/api/stats", { ttl: 10_000 })
-      .then((json) => {
-        if (json.success && json.data) setData(json.data);
-        else setError(true);
-      })
+  const loadData = useCallback(() => {
+    setError(false);
+    cachedFetch<{ success: boolean; data?: CoreData }>("/api/stats?section=core", { ttl: 30_000 })
+      .then((json) => { if (json.success && json.data) setCore(json.data); })
       .catch(() => setError(true));
+
+    cachedFetch<{ success: boolean; data?: ChartData }>("/api/stats?section=chart", { ttl: 30_000 })
+      .then((json) => { if (json.success && json.data) setChart(json.data); })
+      .catch(() => {});
+
+    cachedFetch<{ success: boolean; data?: QuizData }>("/api/stats?section=quiz", { ttl: 30_000 })
+      .then((json) => { if (json.success && json.data) setQuiz(json.data); })
+      .catch(() => {});
   }, []);
 
-  if (error) {
+  useEffect(() => { loadData(); }, [loadData]);
+
+  if (error && !core) {
     return (
       <>
         <Header title="学习统计" />
@@ -81,7 +182,7 @@ export default function StatsPage() {
           <div className="flex h-40 flex-col items-center justify-center gap-2 text-muted-foreground">
             <p>加载失败</p>
             <button
-              onClick={() => { setError(false); window.location.reload(); }}
+              onClick={loadData}
               className="text-sm text-primary underline"
             >
               重试
@@ -92,22 +193,7 @@ export default function StatsPage() {
     );
   }
 
-  if (!data) {
-    return (
-      <>
-        <Header title="学习统计" />
-        <PageContainer>
-          <div className="flex h-40 items-center justify-center text-muted-foreground">
-            加载中...
-          </div>
-        </PageContainer>
-      </>
-    );
-  }
-
-  const masteryPercent = data.masteryPercent;
-
-  const isEmpty = data.totalKP === 0 && data.totalCards === 0 && data.streak.totalReviews === 0;
+  const isEmpty = core && core.totalKP === 0 && core.totalCards === 0 && core.streak.totalReviews === 0;
 
   return (
     <>
@@ -141,98 +227,105 @@ export default function StatsPage() {
             </div>
           )}
 
-          {/* Streak Banner */}
-          <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 p-4 dark:from-orange-950/30 dark:to-amber-950/30">
-            <div className="flex items-center gap-3">
-              <div className="flex size-12 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/50">
-                <Flame className="size-6 text-orange-500" />
+          {/* Core Stats: Streak + Grid + Mastery */}
+          {core ? (
+            <>
+              {/* Streak Banner */}
+              <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 p-4 dark:from-orange-950/30 dark:to-amber-950/30">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/50">
+                    <Flame className="size-6 text-orange-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                      {core.streak.currentStreak}
+                    </p>
+                    <p className="text-xs text-muted-foreground">连续学习天数</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-semibold">{core.streak.longestStreak}</p>
+                  <p className="text-xs text-muted-foreground">最长纪录</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                  {data.streak.currentStreak}
-                </p>
-                <p className="text-xs text-muted-foreground">连续学习天数</p>
+
+              {/* Core Stats Grid */}
+              <div className="grid grid-cols-3 gap-3">
+                <MiniCard
+                  icon={<BookOpen className="size-4 text-blue-500" />}
+                  value={core.totalKP}
+                  label="知识点"
+                  href="/knowledge"
+                />
+                <MiniCard
+                  icon={<Brain className="size-4 text-green-500" />}
+                  value={core.mastered}
+                  label="已掌握"
+                  href="/knowledge"
+                />
+                <MiniCard
+                  icon={<TrendingUp className="size-4 text-orange-500" />}
+                  value={core.dueToday}
+                  label="今日待复习"
+                  href="/review"
+                />
               </div>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-semibold">{data.streak.longestStreak}</p>
-              <p className="text-xs text-muted-foreground">最长纪录</p>
-            </div>
-          </div>
 
-          {/* Core Stats Grid */}
-          <div className="grid grid-cols-3 gap-3">
-            <MiniCard
-              icon={<BookOpen className="size-4 text-blue-500" />}
-              value={data.totalKP}
-              label="知识点"
-              href="/knowledge"
-            />
-            <MiniCard
-              icon={<Brain className="size-4 text-green-500" />}
-              value={data.mastered}
-              label="已掌握"
-              href="/knowledge"
-            />
-            <MiniCard
-              icon={<TrendingUp className="size-4 text-orange-500" />}
-              value={data.dueToday}
-              label="今日待复习"
-              href="/review"
-            />
-          </div>
-
-          {/* Mastery Progress */}
-          <div className="rounded-2xl border p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-muted-foreground">掌握进度</h3>
-              <span className="text-sm font-bold">{masteryPercent}%</span>
-            </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all duration-500"
-                style={{ width: `${masteryPercent}%` }}
-              />
-            </div>
-            <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-              <span>学习中 {data.learning}</span>
-              <span>新卡片 {data.newCards}</span>
-              <span>已掌握 {data.mastered}</span>
-            </div>
-          </div>
+              {/* Mastery Progress */}
+              <div className="rounded-2xl border p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-muted-foreground">掌握进度</h3>
+                  <span className="text-sm font-bold">{core.masteryPercent}%</span>
+                </div>
+                <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all duration-500"
+                    style={{ width: `${core.masteryPercent}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
+                  <span>学习中 {core.learning}</span>
+                  <span>新卡片 {core.newCards}</span>
+                  <span>已掌握 {core.mastered}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <CoreStatsSkeleton />
+          )}
 
           {/* Week Chart */}
-          <WeekChart days={data.recentDays} />
+          {chart ? <WeekChart days={chart.recentDays} /> : <WeekChartSkeleton />}
 
           {/* Today Summary */}
-          {data.todayEpisode && (
+          {chart?.todayEpisode && (
             <div className="rounded-2xl border p-4">
               <h3 className="mb-3 text-sm font-medium text-muted-foreground">今日学习</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-center gap-2">
                   <Clock className="size-4 text-muted-foreground" />
                   <span className="text-sm">
-                    学习 {data.todayEpisode.studyMinutes} 分钟
+                    学习 {chart.todayEpisode.studyMinutes} 分钟
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <RotateIcon />
                   <span className="text-sm">
-                    复习 {data.todayEpisode.reviewedCount} 张卡片
+                    复习 {chart.todayEpisode.reviewedCount} 张卡片
                   </span>
                 </div>
-                {data.todayEpisode.quizScore !== undefined && (
+                {chart.todayEpisode.quizScore !== undefined && (
                   <div className="flex items-center gap-2">
                     <Trophy className="size-4 text-yellow-500" />
                     <span className="text-sm">
-                      测验得分 {data.todayEpisode.quizScore}
+                      测验得分 {chart.todayEpisode.quizScore}
                     </span>
                   </div>
                 )}
               </div>
-              {data.todayEpisode.topics.length > 0 && (
+              {chart.todayEpisode.topics.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {data.todayEpisode.topics.slice(0, 8).map((t) => (
+                  {chart.todayEpisode.topics.slice(0, 8).map((t) => (
                     <span
                       key={t}
                       className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
@@ -246,15 +339,17 @@ export default function StatsPage() {
           )}
 
           {/* Total Reviews */}
-          <div className="rounded-2xl border p-4 text-center">
-            <p className="text-3xl font-bold text-primary">
-              {data.streak.totalReviews}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">累计复习次数</p>
-          </div>
+          {core && (
+            <div className="rounded-2xl border p-4 text-center">
+              <p className="text-3xl font-bold text-primary">
+                {core.streak.totalReviews}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">累计复习次数</p>
+            </div>
+          )}
 
           {/* Daily Quiz Stats */}
-          {data.dailyQuizStats && (
+          {quiz ? (
             <div className="rounded-2xl border p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-medium text-muted-foreground">每日练习</h3>
@@ -267,25 +362,25 @@ export default function StatsPage() {
                 </Link>
               </div>
               <div className="mb-3 flex items-center gap-4">
-                {data.dailyQuizStats.streak > 0 && (
+                {quiz.streak > 0 && (
                   <div className="flex items-center gap-1.5">
                     <Flame className="size-4 text-orange-500" />
-                    <span className="text-sm font-medium">连续 {data.dailyQuizStats.streak} 天</span>
+                    <span className="text-sm font-medium">连续 {quiz.streak} 天</span>
                   </div>
                 )}
-                {data.dailyQuizStats.todayCompleted && (
+                {quiz.todayCompleted && (
                   <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
-                    今日已完成 {data.dailyQuizStats.todayAccuracy}%
+                    今日已完成 {quiz.todayAccuracy}%
                   </span>
                 )}
-                {!data.dailyQuizStats.todayCompleted && (
+                {!quiz.todayCompleted && (
                   <Link href="/daily-quiz" className="text-xs text-blue-500 hover:underline">
                     去做题 →
                   </Link>
                 )}
               </div>
               <div className="flex items-end gap-1">
-                {data.dailyQuizStats.recentResults.map((day: { date: string; accuracy: number | null; completed: boolean }) => (
+                {quiz.recentResults.map((day) => (
                   <div key={day.date} className="flex flex-1 flex-col items-center gap-1">
                     <div className="relative h-16 w-full">
                       <div
@@ -302,6 +397,8 @@ export default function StatsPage() {
                 ))}
               </div>
             </div>
+          ) : (
+            <QuizStatsSkeleton />
           )}
         </div>
       </PageContainer>
