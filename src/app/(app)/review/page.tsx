@@ -278,36 +278,33 @@ export default function ReviewPage() {
     setGrading(true);
     setGradeError("");
 
-    try {
-      const res = await fetch(`/api/cards/${currentCard.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ grade }),
-      });
+    const cardId = currentCard.id;
 
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({ error: "评分提交失败" }));
-        setGradeError(json.error ?? "评分提交失败，请重试");
-        setGrading(false);
-        return;
-      }
-
-      // 打分成功后使相关缓存失效，Dashboard 下次加载可获取最新数据
-      invalidateCache("/api/cards");
-      invalidateCache("/api/cards?status=summary");
-
-      setReviewed((prev) => prev + 1);
-
-      if (currentIdx + 1 < cards.length) {
-        setCurrentIdx((prev) => prev + 1);
-      } else {
-        setDone(true);
-      }
-    } catch {
-      setGradeError("网络错误，请重试");
-    } finally {
-      setGrading(false);
+    // Optimistic update: advance immediately, submit in background
+    setReviewed((prev) => prev + 1);
+    if (currentIdx + 1 < cards.length) {
+      setCurrentIdx((prev) => prev + 1);
+    } else {
+      setDone(true);
     }
+    setGrading(false);
+
+    // Fire-and-forget: submit grade to server in background
+    fetch(`/api/cards/${cardId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ grade }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          console.warn("[review] grade submit failed for", cardId);
+        }
+        invalidateCache("/api/cards");
+        invalidateCache("/api/cards?status=summary");
+      })
+      .catch(() => {
+        console.warn("[review] grade submit network error for", cardId);
+      });
   }
 
   function handleQAGrade(remembered: boolean) {
