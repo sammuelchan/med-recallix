@@ -69,19 +69,20 @@ export default function KnowledgePage() {
       <Header
         title="知识点"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Link
               href="/knowledge/exam"
-              className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-              title="问答测验"
+              className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary hover:bg-primary/20 active:bg-primary/30 transition-colors"
+              aria-label="问答测验"
             >
-              <Sparkles className="size-4" />
+              <Sparkles className="size-5" />
             </Link>
             <Link
               href="/knowledge/new"
-              className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+              className="flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground active:opacity-80 transition-opacity"
+              aria-label="新建知识点"
             >
-              <Plus className="size-4" />
+              <Plus className="size-5" />
             </Link>
           </div>
         }
@@ -102,7 +103,7 @@ export default function KnowledgePage() {
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
               <button
                 onClick={() => setSelectedCategory(null)}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors active:scale-95 ${
                   !selectedCategory
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -116,7 +117,7 @@ export default function KnowledgePage() {
                   onClick={() =>
                     setSelectedCategory(selectedCategory === cat ? null : cat)
                   }
-                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors active:scale-95 ${
                     selectedCategory === cat
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -133,9 +134,10 @@ export default function KnowledgePage() {
               <span>筛选: {selectedCategory}</span>
               <button
                 onClick={() => setSelectedCategory(null)}
-                className="rounded-full p-0.5 hover:bg-muted"
+                className="rounded-full p-2 hover:bg-muted active:bg-muted/80"
+                aria-label="清除筛选"
               >
-                <X className="size-3" />
+                <X className="size-3.5" />
               </button>
             </div>
           )}

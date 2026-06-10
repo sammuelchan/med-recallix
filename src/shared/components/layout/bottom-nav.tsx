@@ -29,8 +29,14 @@ const NAV_ITEMS = [
   { href: "/settings", icon: Settings, label: "设置", prefetchUrl: "/api/config" },
 ] as const;
 
+// 沉浸式路由 — 隐藏底部导航以最大化屏幕空间
+const IMMERSIVE_PREFIXES = ["/daily-quiz", "/review", "/knowledge/exam", "/chat"];
+
 export function BottomNav() {
   const pathname = usePathname();
+
+  const hidden = IMMERSIVE_PREFIXES.some((p) => pathname.startsWith(p));
+  if (hidden) return null;
 
   return (
     <nav className="shrink-0 border-t bg-background safe-bottom z-40">
@@ -42,13 +48,14 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
+              aria-current={isActive ? "page" : undefined}
               onTouchStart={() => shouldPrefetch && prefetch(prefetchUrl)}
               onMouseEnter={() => shouldPrefetch && prefetch(prefetchUrl)}
               className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-xs transition-colors",
+                "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-xs transition-colors min-h-11",
                 isActive
                   ? "text-primary font-medium"
-                  : "text-muted-foreground hover:text-foreground",
+                  : "text-muted-foreground hover:text-foreground active:text-foreground",
               )}
             >
               <Icon className="size-5" />

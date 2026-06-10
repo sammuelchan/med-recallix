@@ -524,7 +524,7 @@ export default function DailyQuizPage() {
           )}
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 h-1 bg-gray-100">
+        <div className="fixed bottom-0 left-0 right-0 h-1 bg-gray-100 safe-bottom">
           <div
             className="h-full bg-blue-500 transition-all duration-300"
             style={{ width: `${((state.displayIndex + (feedback ? 1 : 0)) / state.total) * 100}%` }}

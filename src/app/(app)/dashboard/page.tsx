@@ -33,8 +33,8 @@ export default function DashboardPage() {
       <Header
         title="Med-Recallix"
         action={
-          <Link href="/stats">
-            <Button variant="ghost" size="icon" className="size-9">
+          <Link href="/stats" aria-label="查看学习统计">
+            <Button variant="ghost" size="icon">
               <BarChart3 className="size-5" />
             </Button>
           </Link>
