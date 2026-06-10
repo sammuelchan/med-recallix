@@ -17,6 +17,41 @@
 
 import { getFileKV } from "./kv.local";
 
+/* ─── In-memory read-through cache (short TTL) ─── */
+
+const DEFAULT_CACHE_TTL_MS = 30_000; // 30 seconds
+
+interface CacheEntry {
+  value: string | null;
+  expiry: number;
+}
+
+const readCache = new Map<string, CacheEntry>();
+
+function cacheGet(key: string): string | null | undefined {
+  const entry = readCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiry) {
+    readCache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function cacheSet(key: string, value: string | null, ttl = DEFAULT_CACHE_TTL_MS): void {
+  readCache.set(key, { value, expiry: Date.now() + ttl });
+  if (readCache.size > 500) {
+    const now = Date.now();
+    for (const [k, e] of readCache) {
+      if (now > e.expiry) readCache.delete(k);
+    }
+  }
+}
+
+function cacheInvalidate(key: string): void {
+  readCache.delete(key);
+}
+
 /** Uniform interface that all KV backends implement. */
 interface KVAdapter {
   get(key: string): Promise<string | null>;
@@ -157,7 +192,15 @@ export async function kvGet<T>(
   key: string,
   ns: "config" | "data" = "data",
 ): Promise<T | null> {
+  const cacheKey = `${ns}:${key}`;
+  const cached = cacheGet(cacheKey);
+  if (cached !== undefined) {
+    if (cached === null) return null;
+    try { return JSON.parse(cached) as T; } catch { /* fall through */ }
+  }
+
   const raw = await getAdapter(ns).get(key);
+  cacheSet(cacheKey, raw);
   if (raw === null) return null;
   try {
     return JSON.parse(raw) as T;
@@ -169,22 +212,39 @@ export async function kvGet<T>(
 
 /**
  * Batch-read multiple JSON values from KV in a single round-trip.
- * Returns an array in the same order as the input keys (null for missing keys).
+ * Uses read-through cache; only fetches uncached keys from the backend.
  */
 export async function kvBatchGet<T>(
   keys: string[],
   ns: "config" | "data" = "data",
 ): Promise<(T | null)[]> {
   if (keys.length === 0) return [];
-  const rawValues = await getAdapter(ns).mget(keys);
-  return rawValues.map((raw) => {
-    if (raw === null) return null;
-    try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
+
+  const results: (T | null)[] = new Array(keys.length);
+  const missingIndices: number[] = [];
+  const missingKeys: string[] = [];
+
+  for (let i = 0; i < keys.length; i++) {
+    const cached = cacheGet(`${ns}:${keys[i]}`);
+    if (cached !== undefined) {
+      if (cached === null) { results[i] = null; continue; }
+      try { results[i] = JSON.parse(cached) as T; continue; } catch { /* fall through */ }
     }
-  });
+    missingIndices.push(i);
+    missingKeys.push(keys[i]);
+  }
+
+  if (missingKeys.length > 0) {
+    const rawValues = await getAdapter(ns).mget(missingKeys);
+    for (let j = 0; j < missingKeys.length; j++) {
+      const raw = rawValues[j];
+      cacheSet(`${ns}:${missingKeys[j]}`, raw);
+      if (raw === null) { results[missingIndices[j]] = null; continue; }
+      try { results[missingIndices[j]] = JSON.parse(raw) as T; } catch { results[missingIndices[j]] = null; }
+    }
+  }
+
+  return results;
 }
 
 /** Write a JSON value to KV (upsert). */
@@ -193,7 +253,9 @@ export async function kvPut<T>(
   value: T,
   ns: "config" | "data" = "data",
 ): Promise<void> {
-  await getAdapter(ns).put(key, JSON.stringify(value));
+  const json = JSON.stringify(value);
+  await getAdapter(ns).put(key, json);
+  cacheSet(`${ns}:${key}`, json);
 }
 
 /** Delete a key from KV (no-op if key does not exist). */
@@ -202,6 +264,7 @@ export async function kvDelete(
   ns: "config" | "data" = "data",
 ): Promise<void> {
   await getAdapter(ns).delete(key);
+  cacheInvalidate(`${ns}:${key}`);
 }
 
 /** List keys matching a prefix from KV. */

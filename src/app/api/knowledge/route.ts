@@ -39,18 +39,22 @@ export async function GET(req: NextRequest) {
           };
         }
       }
-      console.log(`[perf] GET /api/knowledge?ids total=${(performance.now()-t0).toFixed(0)}ms auth=${(tAuth-t0).toFixed(0)}ms import=${(tImport-tAuth).toFixed(0)}ms kv=${(tKv-tImport).toFixed(0)}ms`);
-      return NextResponse.json({ success: true, data: map });
+      if (tKv - t0 > 1000) console.warn(`[perf] GET /api/knowledge?ids total=${(tKv-t0).toFixed(0)}ms auth=${(tAuth-t0).toFixed(0)}ms import=${(tImport-tAuth).toFixed(0)}ms kv=${(tKv-tImport).toFixed(0)}ms`);
+      const batchRes = NextResponse.json({ success: true, data: map });
+      batchRes.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
+      return batchRes;
     }
 
     const category = req.nextUrl.searchParams.get("category") ?? undefined;
     const items = await KnowledgeService.list(userId, category);
     const tList = performance.now();
 
-    console.log(`[perf] GET /api/knowledge total=${(tList-t0).toFixed(0)}ms auth=${(tAuth-t0).toFixed(0)}ms list=${(tList-tAuth).toFixed(0)}ms`);
-    return NextResponse.json({ success: true, data: items });
+    if (tList - t0 > 1000) console.warn(`[perf] GET /api/knowledge total=${(tList-t0).toFixed(0)}ms auth=${(tAuth-t0).toFixed(0)}ms list=${(tList-tAuth).toFixed(0)}ms`);
+    const res = NextResponse.json({ success: true, data: items });
+    res.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
+    return res;
   } catch (err) {
-    console.log(`[perf] GET /api/knowledge ERROR total=${(performance.now()-t0).toFixed(0)}ms`);
+    if (performance.now() - t0 > 1000) console.warn(`[perf] GET /api/knowledge ERROR total=${(performance.now()-t0).toFixed(0)}ms`);
     if (err instanceof AppError) return NextResponse.json(err.toJSON(), { status: err.status });
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
   }
