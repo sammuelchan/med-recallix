@@ -188,9 +188,13 @@ export default function DailyQuizPage() {
           correctCount: json.data.progress.correctCount,
           currentIndex: json.data.progress.currentIndex,
         }));
+      } else {
+        setSelectedAnswer(null);
+        isAnsweringRef.current = false;
       }
     } catch {
       setSelectedAnswer(null);
+      isAnsweringRef.current = false;
     } finally {
       setSubmitting(false);
     }

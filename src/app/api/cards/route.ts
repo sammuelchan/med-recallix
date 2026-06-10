@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
 import { getUserId } from "@/shared/lib/get-user-id";
+import { StatsSnapshotService } from "@/shared/services/stats-snapshot";
 
 export async function GET(req: NextRequest) {
   try {
@@ -94,6 +95,8 @@ export async function POST(req: NextRequest) {
     }
 
     const resetCount = await ReviewService.resetCardsBatch(userId, idsToReset);
+    // 重置后 dueToday 变化，异步更新统计快照
+    StatsSnapshotService.rebuildAsync(userId);
     return NextResponse.json({ success: true, data: { reset: resetCount } });
   } catch {
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });

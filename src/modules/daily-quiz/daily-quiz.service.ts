@@ -275,6 +275,13 @@ export const DailyQuizService = {
       lastAnsweredAt: now,
     };
 
+    // 幂等性：如果已答过此题，先回退旧答案对 correctCount 的影响
+    const previousAnswer = currentProgress.answers[questionId];
+    if (previousAnswer !== undefined) {
+      const wasCorrect = question.answer === previousAnswer;
+      if (wasCorrect) currentProgress.correctCount--;
+    }
+
     currentProgress.answers[questionId] = userAnswer;
     if (isCorrect) currentProgress.correctCount++;
     currentProgress.currentIndex = Object.keys(currentProgress.answers).length;

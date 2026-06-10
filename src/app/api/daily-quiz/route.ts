@@ -59,7 +59,9 @@ export async function POST(req: NextRequest) {
       warning = "题目生成失败，请检查 AI 配置或为知识点添加 QA 问答";
     }
 
-    return NextResponse.json({ success: true, data: { status: quiz.status, quiz, warning } });
+    // 和 GET 一样脱敏：不返回未答题目的答案/解析，防止作弊
+    const sanitized = sanitizeQuiz(quiz, null);
+    return NextResponse.json({ success: true, data: { status: quiz.status, quiz: sanitized, warning } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "服务器错误";
     const status = message.includes("知识点不足") ? 400 : 500;

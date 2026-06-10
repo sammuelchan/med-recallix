@@ -285,6 +285,10 @@ export default function ReviewPage() {
         return;
       }
 
+      // 打分成功后使相关缓存失效，Dashboard 下次加载可获取最新数据
+      invalidateCache("/api/cards");
+      invalidateCache("/api/cards?status=summary");
+
       setReviewed((prev) => prev + 1);
 
       if (currentIdx + 1 < cards.length) {

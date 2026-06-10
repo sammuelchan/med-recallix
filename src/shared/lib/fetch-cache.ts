@@ -47,9 +47,12 @@ export async function cachedFetch<T>(
   if (existing) return existing as Promise<T>;
 
   const promise = fetch(url)
-    .then((res) => res.json())
-    .then((json) => {
-      cache.set(url, { data: json, timestamp: Date.now() });
+    .then(async (res) => {
+      const json = await res.json();
+      // 仅缓存成功响应；错误响应（401/500等）不缓存，避免 TTL 期间持续返回错误
+      if (res.ok) {
+        cache.set(url, { data: json, timestamp: Date.now() });
+      }
       inflight.delete(url);
       return json as T;
     })
