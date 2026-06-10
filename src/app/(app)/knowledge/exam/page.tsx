@@ -97,6 +97,19 @@ function ExamPageInner() {
   const [error, setError] = useState("");
   const [loadingKP, setLoadingKP] = useState(true);
   const [wrongCount, setWrongCount] = useState(0);
+  const [genProgress, setGenProgress] = useState(0);
+
+  // 离开拦截: 生成中或答题中离开页面时提醒，避免 token 浪费
+  useEffect(() => {
+    const shouldBlock = phase === "loading" || phase === "exam" || phase === "evaluating" || phase === "feedback";
+    if (!shouldBlock) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [phase]);
 
   useEffect(() => {
     fetch("/api/knowledge")
@@ -123,6 +136,15 @@ function ExamPageInner() {
   const startExam = useCallback(async () => {
     setError("");
     setPhase("loading");
+    setGenProgress(0);
+
+    // 模拟进度动画: 0→90% 在 15s 内渐进，给用户等待反馈
+    const progressTimer = setInterval(() => {
+      setGenProgress((prev) => {
+        if (prev >= 90) return prev;
+        return prev + (90 - prev) * 0.08;
+      });
+    }, 500);
 
     try {
       const res = await fetch("/api/exam/generate", {
@@ -134,6 +156,9 @@ function ExamPageInner() {
         }),
       });
 
+      clearInterval(progressTimer);
+      setGenProgress(100);
+
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
       if (!json.data?.length) throw new Error("未能生成题目，请确保有足够的知识点");
@@ -144,6 +169,8 @@ function ExamPageInner() {
       setInputValue("");
       setPhase("exam");
     } catch (err) {
+      clearInterval(progressTimer);
+      setGenProgress(0);
       setError(err instanceof Error ? err.message : "生成失败");
       setPhase("setup");
     }
@@ -362,18 +389,29 @@ function ExamPageInner() {
     );
   }
 
-  // --- Loading Phase ---
+  // --- Loading Phase (带进度条和离开提醒) ---
   if (phase === "loading") {
     return (
       <>
         <Header title="问答测验" />
         <PageContainer className="flex items-center justify-center">
-          <div className="text-center space-y-4">
+          <div className="text-center space-y-5 w-full max-w-xs">
             <Loader2 className="size-10 animate-spin text-primary mx-auto" />
             <div>
               <p className="font-medium">AI 正在出题...</p>
               <p className="text-sm text-muted-foreground mt-1">
                 综合知识点内容生成测验题目
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                  style={{ width: `${Math.round(genProgress)}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {Math.round(genProgress)}% · 预计 10-15 秒，请勿离开
               </p>
             </div>
           </div>
