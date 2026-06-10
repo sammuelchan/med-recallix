@@ -617,9 +617,18 @@ export const DailyQuizService = {
                 const parsed = JSON.parse(jsonMatch[0]) as Array<{ distractors: string[] }>;
                 for (let i = 0; i < rawQAs.length && i < parsed.length; i++) {
                   const item = rawQAs[i];
-                  const distractors = (parsed[i]?.distractors ?? []).filter(
-                    (d) => d && d.trim().length > 0 && d.trim() !== item.qa.answer.trim(),
-                  ).slice(0, 3);
+                  const correctText = item.qa.answer.trim().toLowerCase();
+                  const seen = new Set<string>([correctText]);
+                  const distractors: string[] = [];
+                  for (const d of parsed[i]?.distractors ?? []) {
+                    const trimmed = d?.trim();
+                    if (!trimmed || trimmed.length === 0) continue;
+                    const key = trimmed.toLowerCase();
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    distractors.push(trimmed);
+                    if (distractors.length >= 3) break;
+                  }
                   if (distractors.length < 3) continue;
 
                   const correctAnswer = item.qa.answer.trim();
