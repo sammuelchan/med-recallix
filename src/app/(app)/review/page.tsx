@@ -17,7 +17,6 @@ import {
   CreditCard,
   PenLine,
   ListChecks,
-  Home,
 } from "lucide-react";
 import type { ReviewGrade, CardIndexItem } from "@/modules/review";
 import type { KnowledgePoint, QAPair } from "@/modules/knowledge";
@@ -76,16 +75,7 @@ function BlankText({
 
 export default function ReviewPage() {
   const router = useRouter();
-  const homeAction = (
-    <button
-      type="button"
-      onClick={() => router.push("/dashboard")}
-      className="flex items-center justify-center size-8 rounded-lg hover:bg-muted transition-colors"
-      aria-label="返回首页"
-    >
-      <Home className="size-4" />
-    </button>
-  );
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [cards, setCards] = useState<CardIndexItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
@@ -115,6 +105,15 @@ export default function ReviewPage() {
   const [allCards, setAllCards] = useState<CardIndexItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loadingCards, setLoadingCards] = useState(false);
+
+  const handleBack = useCallback(() => {
+    const remaining = cards.length - currentIdx;
+    if (!done && remaining > 0 && currentIdx > 0) {
+      setShowLeaveConfirm(true);
+    } else {
+      router.push("/dashboard");
+    }
+  }, [cards.length, currentIdx, done, router]);
 
   const openCardPicker = useCallback(async () => {
     setLoadingCards(true);
@@ -538,6 +537,33 @@ export default function ReviewPage() {
     );
   }
 
+  // --- Leave confirmation dialog ---
+  const leaveConfirmDialog = showLeaveConfirm && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-xl space-y-4">
+        <h3 className="text-lg font-semibold text-center">确定要退出复习吗？</h3>
+        <p className="text-sm text-muted-foreground text-center">
+          还有 {cards.length - currentIdx} 张卡片未复习，已复习进度不会丢失。
+        </p>
+        <div className="flex gap-3 pt-2">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => setShowLeaveConfirm(false)}
+          >
+            继续复习
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={() => router.push("/dashboard")}
+          >
+            退出
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
   // --- Mode selector ---
   const modeSelector = (
     <div className="flex rounded-lg border p-0.5 gap-0.5 mb-4">
@@ -587,8 +613,9 @@ export default function ReviewPage() {
   if (mode === "card") {
     return (
       <>
-        <Header title={`复习 ${currentIdx + 1}/${cards.length}`} action={homeAction} />
+        <Header title={`复习 ${currentIdx + 1}/${cards.length}`} onBack={handleBack} />
         <PageContainer>
+          {leaveConfirmDialog}
           <div className="space-y-6">
             {modeSelector}
             <div
@@ -662,8 +689,9 @@ export default function ReviewPage() {
   if (kpData && kpData.contentMode === "text" && !qaItemsAvailable) {
     return (
       <>
-        <Header title={`复习 ${currentIdx + 1}/${cards.length}`} action={homeAction} />
+        <Header title={`复习 ${currentIdx + 1}/${cards.length}`} onBack={handleBack} />
         <PageContainer>
+          {leaveConfirmDialog}
           <div className="space-y-6">
             {modeSelector}
             <div className="rounded-2xl border-2 p-6 space-y-4">
@@ -720,9 +748,10 @@ export default function ReviewPage() {
         title={`复习 ${currentIdx + 1}/${cards.length}${
           currentQA ? ` · 第${qaIdx + 1}/${currentQAItems!.length}题` : ""
         }`}
-        action={homeAction}
+        onBack={handleBack}
       />
       <PageContainer>
+        {leaveConfirmDialog}
         <div className="space-y-6">
           {modeSelector}
 
