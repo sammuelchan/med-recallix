@@ -7,7 +7,8 @@ import { PageContainer } from "@/shared/components/layout";
 import { Input } from "@/shared/components/ui/input";
 import { KnowledgeCard } from "@/modules/knowledge/components/knowledge-card";
 import { Plus, Search, X, Sparkles } from "lucide-react";
-import { cachedFetch, invalidateCachePrefix } from "@/shared/lib/fetch-cache";
+import { cachedFetch } from "@/shared/lib/fetch-cache";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import type { KPIndexItem } from "@/modules/knowledge";
 
 export default function KnowledgePage() {
@@ -17,7 +18,6 @@ export default function KnowledgePage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useEffect(() => {
-    invalidateCachePrefix("/api/knowledge");
     cachedFetch<{ success: boolean; data?: KPIndexItem[] }>("/api/knowledge", { ttl: 15_000 })
       .then((json) => {
         if (json.success && json.data) setItems(json.data);
@@ -141,8 +141,17 @@ export default function KnowledgePage() {
           )}
 
           {loading ? (
-            <div className="flex justify-center py-12">
-              <div className="size-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border p-4 space-y-2">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                  <div className="flex gap-2 pt-1">
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">

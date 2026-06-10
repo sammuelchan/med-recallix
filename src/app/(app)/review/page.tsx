@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/shared/components/layout";
 import { PageContainer } from "@/shared/components/layout";
 import { Button } from "@/shared/components/ui/button";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
+import { cachedFetch, invalidateCache } from "@/shared/lib/fetch-cache";
 import {
   RotateCcw,
   CheckCircle2,
@@ -16,7 +18,7 @@ import {
   PenLine,
   ListChecks,
 } from "lucide-react";
-import type { Card, ReviewGrade, CardIndexItem } from "@/modules/review";
+import type { ReviewGrade, CardIndexItem } from "@/modules/review";
 import type { KnowledgePoint, QAPair } from "@/modules/knowledge";
 
 type ReviewDisplayMode = "qa" | "fill-blank" | "card";
@@ -73,7 +75,7 @@ function BlankText({
 
 export default function ReviewPage() {
   const router = useRouter();
-  const [cards, setCards] = useState<Card[]>([]);
+  const [cards, setCards] = useState<CardIndexItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
   const [reviewed, setReviewed] = useState(0);
@@ -119,6 +121,22 @@ export default function ReviewPage() {
     setLoadingCards(false);
   }, []);
 
+  const reloadCards = useCallback(async () => {
+    invalidateCache("/api/cards");
+    const json = await cachedFetch<{ success: boolean; data?: CardIndexItem[] }>("/api/cards", { force: true, ttl: 10_000 });
+    if (json.success && json.data) {
+      setCards(json.data);
+      setCurrentIdx(0);
+      setFlipped(false);
+      setDone(false);
+      setReviewed(0);
+      setKpData(null);
+      setQaIdx(0);
+      setAnswerRevealed(false);
+      setKpSummary(null);
+    }
+  }, []);
+
   const handleResetSelected = useCallback(async () => {
     if (selectedIds.size === 0) return;
     setResetting(true);
@@ -128,11 +146,11 @@ export default function ReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardIds: Array.from(selectedIds) }),
       });
-      window.location.reload();
-    } catch {
-      setResetting(false);
-    }
-  }, [selectedIds]);
+      setShowCardPicker(false);
+      await reloadCards();
+    } catch { /* silent */ }
+    setResetting(false);
+  }, [selectedIds, reloadCards]);
 
   const handleResetAllToday = useCallback(async () => {
     setResetting(true);
@@ -143,11 +161,10 @@ export default function ReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardIds }),
       });
-      window.location.reload();
-    } catch {
-      setResetting(false);
-    }
-  }, [cards]);
+      await reloadCards();
+    } catch { /* silent */ }
+    setResetting(false);
+  }, [cards, reloadCards]);
 
   const toggleCardSelection = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -162,20 +179,19 @@ export default function ReviewPage() {
   const kpCacheRef = useRef<Map<string, KPData>>(new Map());
 
   useEffect(() => {
-    fetch("/api/cards")
-      .then((r) => r.json())
+    cachedFetch<{ success: boolean; data?: CardIndexItem[] }>("/api/cards", { ttl: 10_000 })
       .then(async (json) => {
-        if (json.success && json.data.length > 0) {
+        if (json.success && json.data && json.data.length > 0) {
           setCards(json.data);
-          // Batch preload KP content for all due cards
-          const ids = [...new Set((json.data as Card[]).map((c) => c.knowledgePointId))];
+          const ids = [...new Set(json.data.map((c) => c.knowledgePointId))];
           if (ids.length > 0) {
             try {
-              const kpRes = await fetch(`/api/knowledge?ids=${ids.join(",")}`);
-              const kpJson = await kpRes.json();
-              if (kpJson.success) {
-                const map = kpJson.data as Record<string, KPData>;
-                for (const [id, data] of Object.entries(map)) {
+              const kpJson = await cachedFetch<{ success: boolean; data?: Record<string, KPData> }>(
+                `/api/knowledge?ids=${ids.join(",")}`,
+                { ttl: 30_000 },
+              );
+              if (kpJson.success && kpJson.data) {
+                for (const [id, data] of Object.entries(kpJson.data)) {
                   kpCacheRef.current.set(id, data);
                 }
               }
@@ -307,13 +323,28 @@ export default function ReviewPage() {
     }
   }
 
-  // --- Loading state ---
+  // --- Loading state (skeleton) ---
   if (loading) {
     return (
       <>
         <Header title="复习" />
-        <PageContainer className="flex items-center justify-center">
-          <div className="size-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
+        <PageContainer>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-8 w-20 rounded-lg" />
+            </div>
+            <div className="rounded-2xl border p-6 space-y-4">
+              <Skeleton className="h-6 w-3/4" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-32 w-full rounded-xl" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-10 flex-1 rounded-lg" />
+              <Skeleton className="h-10 flex-1 rounded-lg" />
+            </div>
+          </div>
         </PageContainer>
       </>
     );

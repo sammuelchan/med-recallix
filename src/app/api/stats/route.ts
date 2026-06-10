@@ -1,11 +1,14 @@
 /**
  * Stats API Route — aggregate learning statistics for the dashboard
  *
+ * Strategy: read pre-computed snapshot first (1 KV read, ~50ms).
+ * Falls back to real-time computation if snapshot is stale or missing.
+ *
  * Supports sectioned queries via `?section=` for progressive loading:
- *   - core    → KP/card counts, streak, mastery (fast: 2-3 KV reads)
+ *   - core    → KP/card counts, streak, mastery
  *   - chart   → 7-day activity data (episodes)
- *   - quiz    → daily quiz stats (7 KV reads)
- *   - (none)  → all sections combined (legacy full response)
+ *   - quiz    → daily quiz stats
+ *   - (none)  → all sections combined
  *
  * Mastery criteria: repetition >= 3 AND efactor >= 2.5 (SM-2 threshold).
  */
@@ -19,6 +22,7 @@ import { toISODateString } from "@/shared/lib/utils";
 import { getUserId } from "@/shared/lib/get-user-id";
 import { jsonWithCache } from "@/shared/lib/api-response";
 import { kvGet, kvKeys } from "@/shared/infrastructure/kv";
+import { StatsSnapshotService } from "@/shared/services/stats-snapshot";
 import type { DailyQuizResult } from "@/modules/daily-quiz";
 
 function buildDates(): string[] {
@@ -95,39 +99,56 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
   const section = req.nextUrl.searchParams.get("section");
-  const dates = buildDates();
-  const today = dates[dates.length - 1];
 
   try {
+    // Try snapshot first (single KV read).
+    // Even on hit, trigger async rebuild as compensation — ensures eventual
+    // consistency if a prior rebuild was lost (e.g. serverless cold-start crash).
+    const snapshot = await StatsSnapshotService.get(userId);
+
+    if (snapshot) {
+      StatsSnapshotService.rebuildAsync(userId);
+      if (section === "core") return jsonWithCache({ success: true, data: snapshot.core }, 15);
+      if (section === "chart") return jsonWithCache({ success: true, data: snapshot.chart }, 15);
+      if (section === "quiz") return jsonWithCache({ success: true, data: snapshot.quiz }, 15);
+      return jsonWithCache({
+        success: true,
+        data: { ...snapshot.core, ...snapshot.chart, dailyQuizStats: snapshot.quiz },
+      }, 10);
+    }
+
+    // Snapshot miss — fall back to real-time computation
+    const dates = buildDates();
+    const today = dates[dates.length - 1];
+
     if (section === "core") {
       const data = await getCoreStats(userId, today);
-      return jsonWithCache({ success: true, data }, 30);
+      StatsSnapshotService.rebuildAsync(userId);
+      return jsonWithCache({ success: true, data }, 15);
     }
 
     if (section === "chart") {
       const data = await getChartStats(userId, dates);
-      return jsonWithCache({ success: true, data }, 30);
+      return jsonWithCache({ success: true, data }, 15);
     }
 
     if (section === "quiz") {
       const data = await getQuizStats(userId, dates, today);
-      return jsonWithCache({ success: true, data }, 30);
+      return jsonWithCache({ success: true, data }, 15);
     }
 
-    // Legacy: return all sections combined
+    // Full computation + trigger snapshot build for next time
     const [core, chart, quiz] = await Promise.all([
       getCoreStats(userId, today),
       getChartStats(userId, dates),
       getQuizStats(userId, dates, today),
     ]);
 
+    StatsSnapshotService.rebuildAsync(userId);
+
     return jsonWithCache({
       success: true,
-      data: {
-        ...core,
-        ...chart,
-        dailyQuizStats: quiz,
-      },
+      data: { ...core, ...chart, dailyQuizStats: quiz },
     }, 10);
   } catch {
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });

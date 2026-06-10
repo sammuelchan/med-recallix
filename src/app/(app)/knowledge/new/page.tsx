@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/shared/components/layout";
 import { PageContainer } from "@/shared/components/layout";
 import { KnowledgeForm } from "@/modules/knowledge/components/knowledge-form";
+import { invalidateCache } from "@/shared/lib/fetch-cache";
 import type { ContentMode, QAPair } from "@/modules/knowledge";
 
 export default function NewKnowledgePage() {
@@ -27,8 +28,8 @@ export default function NewKnowledgePage() {
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "创建失败");
 
+    invalidateCache("/api/knowledge");
     router.push("/knowledge");
-    router.refresh();
   }
 
   return (

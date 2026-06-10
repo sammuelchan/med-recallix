@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, TrendingUp, TrendingDown, Flame } from "lucide-react";
 import { Header, PageContainer } from "@/shared/components/layout";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import type { DailyQuizResult } from "@/modules/daily-quiz";
 
 export default function DailyQuizReportPage() {
@@ -13,6 +14,17 @@ export default function DailyQuizReportPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Try sessionStorage first (passed from quiz completion — avoids re-fetch)
+    const cached = sessionStorage.getItem("dailyQuizResult");
+    if (cached) {
+      try {
+        setResult(JSON.parse(cached));
+        setLoading(false);
+        sessionStorage.removeItem("dailyQuizResult");
+        return;
+      } catch { /* fall through to fetch */ }
+    }
+
     fetch("/api/daily-quiz")
       .then((res) => res.json())
       .then((json) => {
@@ -29,8 +41,14 @@ export default function DailyQuizReportPage() {
       <>
         <Header title="答题报告" />
         <PageContainer>
-          <div className="flex items-center justify-center py-20">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+          <div className="space-y-6 py-4">
+            <Skeleton className="h-40 w-full rounded-2xl" />
+            <div className="grid grid-cols-3 gap-3">
+              <Skeleton className="h-20 rounded-xl" />
+              <Skeleton className="h-20 rounded-xl" />
+              <Skeleton className="h-20 rounded-xl" />
+            </div>
+            <Skeleton className="h-14 w-full rounded-xl" />
           </div>
         </PageContainer>
       </>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Header, PageContainer } from "@/shared/components/layout";
 import { Flame, BookOpen, Brain, Clock, TrendingUp, Trophy, Plus, RotateCcw, FileText } from "lucide-react";
 import { cachedFetch } from "@/shared/lib/fetch-cache";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import type { StreakData } from "@/modules/review";
 import type { DailyEpisode } from "@/modules/agent";
 
@@ -29,10 +30,6 @@ interface QuizData {
   streak: number;
   todayCompleted: boolean;
   todayAccuracy: number | null;
-}
-
-function Skeleton({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
-  return <div className={`animate-pulse rounded-lg bg-muted ${className}`} style={style} />;
 }
 
 function gradeLabel(count: number): string {
@@ -159,15 +156,15 @@ export default function StatsPage() {
 
   const loadData = useCallback(() => {
     setError(false);
-    cachedFetch<{ success: boolean; data?: CoreData }>("/api/stats?section=core", { ttl: 30_000 })
+    cachedFetch<{ success: boolean; data?: CoreData }>("/api/stats?section=core", { ttl: 15_000 })
       .then((json) => { if (json.success && json.data) setCore(json.data); })
       .catch(() => setError(true));
 
-    cachedFetch<{ success: boolean; data?: ChartData }>("/api/stats?section=chart", { ttl: 30_000 })
+    cachedFetch<{ success: boolean; data?: ChartData }>("/api/stats?section=chart", { ttl: 15_000 })
       .then((json) => { if (json.success && json.data) setChart(json.data); })
       .catch(() => {});
 
-    cachedFetch<{ success: boolean; data?: QuizData }>("/api/stats?section=quiz", { ttl: 30_000 })
+    cachedFetch<{ success: boolean; data?: QuizData }>("/api/stats?section=quiz", { ttl: 15_000 })
       .then((json) => { if (json.success && json.data) setQuiz(json.data); })
       .catch(() => {});
   }, []);

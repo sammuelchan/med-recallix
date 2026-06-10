@@ -7,7 +7,8 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { useAuth } from "@/modules/auth/use-auth";
-import { invalidateAll } from "@/shared/lib/fetch-cache";
+import { cachedFetch, invalidateAll, invalidateCache } from "@/shared/lib/fetch-cache";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Check, RefreshCw } from "lucide-react";
 
 export default function SettingsPage() {
@@ -21,10 +22,9 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    fetch("/api/config")
-      .then((r) => r.json())
+    cachedFetch<{ success: boolean; data?: { baseURL?: string; model?: string; hasKey?: boolean } }>("/api/config")
       .then((json) => {
-        if (json.success) {
+        if (json.success && json.data) {
           setBaseURL(json.data.baseURL || "");
           setModel(json.data.model || "");
           setHasKey(!!json.data.hasKey);
@@ -51,6 +51,7 @@ export default function SettingsPage() {
       });
       const json = await res.json();
       if (json.success) {
+        invalidateCache("/api/config");
         setBaseURL(json.data.baseURL || "");
         setModel(json.data.model || "");
         setHasKey(!!json.data.hasKey);
@@ -87,7 +88,11 @@ export default function SettingsPage() {
               AI 模型配置
             </h3>
             {!configLoaded ? (
-              <p className="text-sm text-muted-foreground">加载中...</p>
+              <div className="space-y-3">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
             ) : (
               <form onSubmit={handleSaveConfig} className="space-y-3">
                 <div className="space-y-1">

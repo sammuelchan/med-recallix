@@ -10,6 +10,7 @@ import { ReviewService, ReviewGradeSchema } from "@/modules/review";
 import { AppError } from "@/shared/lib/errors";
 import type { ReviewGrade } from "@/modules/review";
 import { getUserId } from "@/shared/lib/get-user-id";
+import { StatsSnapshotService } from "@/shared/services/stats-snapshot";
 
 export async function PUT(
   req: NextRequest,
@@ -24,6 +25,7 @@ export async function PUT(
     const { grade } = ReviewGradeSchema.parse(body);
 
     const card = await ReviewService.reviewCard(userId, id, grade as ReviewGrade);
+    StatsSnapshotService.rebuildAsync(userId);
     return NextResponse.json({ success: true, data: card });
   } catch (err) {
     if (err instanceof AppError) return NextResponse.json(err.toJSON(), { status: err.status });

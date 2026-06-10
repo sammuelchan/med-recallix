@@ -11,6 +11,7 @@ import { KnowledgeService, UpdateKPSchema } from "@/modules/knowledge";
 import { ReviewService } from "@/modules/review";
 import { AppError } from "@/shared/lib/errors";
 import { getUserId } from "@/shared/lib/get-user-id";
+import { StatsSnapshotService } from "@/shared/services/stats-snapshot";
 
 export async function GET(
   req: NextRequest,
@@ -95,6 +96,7 @@ export async function DELETE(
       ReviewService.removeCardByKP(userId, id),
       KnowledgeService.delete(userId, id),
     ]);
+    StatsSnapshotService.rebuildAsync(userId);
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof AppError) return NextResponse.json(err.toJSON(), { status: err.status });

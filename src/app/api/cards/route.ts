@@ -61,8 +61,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const cards = await ReviewService.getDueCards(userId);
-    return NextResponse.json({ success: true, data: cards });
+    const index = await ReviewService.getCardIndex(userId);
+    const today = new Date().toISOString().slice(0, 10);
+    const dueCards = index.filter((item) => item.dueDate <= today);
+    const res = NextResponse.json({ success: true, data: dueCards });
+    res.headers.set("Cache-Control", "private, max-age=10, stale-while-revalidate=20");
+    return res;
   } catch {
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
   }

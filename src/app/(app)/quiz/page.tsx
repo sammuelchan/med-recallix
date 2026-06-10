@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { Header } from "@/shared/components/layout";
 import { PageContainer } from "@/shared/components/layout";
 import { Button } from "@/shared/components/ui/button";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
+import { cachedFetch } from "@/shared/lib/fetch-cache";
 import { Loader2, Check, X } from "lucide-react";
 import type { KPIndexItem } from "@/modules/knowledge";
 import type { QuizQuestion } from "@/modules/quiz";
@@ -14,6 +16,7 @@ type Phase = "select" | "loading" | "quiz" | "result";
 export default function QuizPage() {
   const [phase, setPhase] = useState<Phase>("select");
   const [kpList, setKpList] = useState<KPIndexItem[]>([]);
+  const [kpLoading, setKpLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentQ, setCurrentQ] = useState(0);
@@ -22,11 +25,11 @@ export default function QuizPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/knowledge")
-      .then((r) => r.json())
+    cachedFetch<{ success: boolean; data?: KPIndexItem[] }>("/api/knowledge", { ttl: 15_000 })
       .then((json) => {
-        if (json.success) setKpList(json.data);
-      });
+        if (json.success && json.data) setKpList(json.data);
+      })
+      .finally(() => setKpLoading(false));
   }, []);
 
   function toggleSelect(id: string) {
@@ -99,7 +102,13 @@ export default function QuizPage() {
             </p>
             {error && <p className="text-sm text-destructive">{error}</p>}
 
-            {kpList.length === 0 ? (
+            {kpLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : kpList.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 <p className="text-4xl mb-4">📝</p>
                 <p>先添加知识点才能出题</p>

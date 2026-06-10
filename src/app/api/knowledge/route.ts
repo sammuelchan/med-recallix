@@ -16,6 +16,7 @@ import { KnowledgeService, CreateKPSchema } from "@/modules/knowledge";
 import { ReviewService } from "@/modules/review";
 import { AppError } from "@/shared/lib/errors";
 import { getUserId } from "@/shared/lib/get-user-id";
+import { StatsSnapshotService } from "@/shared/services/stats-snapshot";
 
 export async function GET(req: NextRequest) {
   const t0 = performance.now();
@@ -76,8 +77,9 @@ export async function POST(req: NextRequest) {
     const input = CreateKPSchema.parse(body);
     const kp = await KnowledgeService.create(userId, input);
 
-    // Fire-and-forget: add review card (non-blocking for response)
+    // Fire-and-forget: add review card + refresh stats (non-blocking)
     ReviewService.addCard(userId, kp.id, kp.displayTitle).catch(() => {});
+    StatsSnapshotService.rebuildAsync(userId);
 
     return NextResponse.json({ success: true, data: kp }, { status: 201 });
   } catch (err) {

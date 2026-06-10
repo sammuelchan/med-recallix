@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Clock, RefreshCw, Flag } from "lucide-react";
 import { Header, PageContainer } from "@/shared/components/layout";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
 import type { DailyQuizQuestion, DailyQuizStatus } from "@/modules/daily-quiz";
 
@@ -203,7 +204,11 @@ export default function DailyQuizPage() {
 
     if (allDone) {
       try {
-        await fetch("/api/daily-quiz/complete", { method: "POST" });
+        const completeRes = await fetch("/api/daily-quiz/complete", { method: "POST" });
+        const completeJson = await completeRes.json();
+        if (completeJson.success && completeJson.data) {
+          sessionStorage.setItem("dailyQuizResult", JSON.stringify(completeJson.data));
+        }
       } catch {}
       router.push("/daily-quiz/report");
       return;
@@ -289,9 +294,21 @@ export default function DailyQuizPage() {
       <>
         <Header title="今日练习" />
         <PageContainer>
-          <div className="flex flex-col items-center justify-center gap-4 py-20">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-            <p className="text-sm text-gray-500">正在加载题目...</p>
+          <div className="space-y-5 py-4">
+            <div className="flex justify-between items-center">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <Skeleton className="h-2 w-full rounded-full" />
+            <div className="rounded-2xl border p-5 space-y-4">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-4/5" />
+            </div>
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-xl" />
+              ))}
+            </div>
           </div>
         </PageContainer>
       </>

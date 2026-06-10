@@ -1,13 +1,20 @@
 /**
- * Client-side Fetch Cache
+ * 客户端请求缓存层（数据获取统一入口）
  *
- * Lightweight in-memory cache for GET API requests with:
- *   - Request deduplication (concurrent requests to same URL share one fetch)
- *   - TTL-based expiration (default 30s, configurable)
- *   - Manual invalidation via `invalidate(url)` or `invalidateAll()`
+ * 功能：
+ *   - 请求去重：并发请求同一 URL 只发一次网络请求
+ *   - TTL 过期：默认 30s，可配置
+ *   - 手动失效：写操作后调用 invalidateCache(url) 精准清除
+ *   - prefetch 消费：底部导航预取的数据会自动被页面复用
  *
- * Designed for client components that re-mount frequently (e.g. page navigations).
- * Not a full SWR replacement, but eliminates redundant network requests.
+ * 使用规范：
+ *   - 读操作一律用 cachedFetch（消费 prefetch 缓存，避免重复请求）
+ *   - 写操作后调用 invalidateCache(相关URL)（不要在 mount 时 invalidate）
+ *   - 永远不在 useEffect mount 阶段调用 invalidateCachePrefix
+ *
+ * 存储特性：
+ *   - 纯内存 Map，SPA 刷新即清空，不会持久膨胀
+ *   - 页面切换时如果缓存新鲜则零网络请求
  */
 
 interface CacheEntry<T> {

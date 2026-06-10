@@ -9,6 +9,8 @@ import { Badge } from "@/shared/components/ui/badge";
 import { KnowledgeForm } from "@/modules/knowledge/components/knowledge-form";
 import { Pencil, Trash2, ArrowLeft } from "lucide-react";
 import { ReviewTimeline } from "@/modules/review/components/review-timeline";
+import { Skeleton } from "@/shared/components/ui/skeleton";
+import { cachedFetch, invalidateCache } from "@/shared/lib/fetch-cache";
 import type { KnowledgePoint, ContentMode, QAPair } from "@/modules/knowledge";
 
 export default function KnowledgeDetailPage() {
@@ -28,13 +30,15 @@ export default function KnowledgeDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/knowledge/${id}?include=recall`)
-      .then((r) => r.json())
+    cachedFetch<{ success: boolean; data?: Record<string, unknown> }>(
+      `/api/knowledge/${id}?include=recall`,
+      { ttl: 15_000 },
+    )
       .then((json) => {
-        if (json.success) {
+        if (json.success && json.data) {
           const { recall, ...kpData } = json.data;
-          setKp(kpData as KnowledgePoint);
-          setRecallData(recall ?? null);
+          setKp(kpData as unknown as KnowledgePoint);
+          setRecallData((recall as typeof recallData) ?? null);
         }
       })
       .finally(() => setLoading(false));
@@ -55,6 +59,7 @@ export default function KnowledgeDetailPage() {
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "更新失败");
+    invalidateCache("/api/knowledge");
     setKp(json.data);
     setEditing(false);
   }
@@ -63,8 +68,8 @@ export default function KnowledgeDetailPage() {
     if (!confirm("确定要删除这个知识点吗？关联的复习卡片也会被删除。")) return;
     const res = await fetch(`/api/knowledge/${id}`, { method: "DELETE" });
     if (res.ok) {
+      invalidateCache("/api/knowledge");
       router.push("/knowledge");
-      router.refresh();
     }
   }
 
@@ -72,8 +77,20 @@ export default function KnowledgeDetailPage() {
     return (
       <>
         <Header title="知识点" />
-        <PageContainer className="flex items-center justify-center">
-          <div className="size-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
+        <PageContainer>
+          <div className="space-y-4">
+            <Skeleton className="h-7 w-3/4" />
+            <div className="flex gap-2">
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <div className="space-y-2 pt-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+            <Skeleton className="h-32 w-full rounded-xl mt-4" />
+          </div>
         </PageContainer>
       </>
     );
