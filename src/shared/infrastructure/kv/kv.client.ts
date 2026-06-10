@@ -19,7 +19,7 @@ import { getFileKV } from "./kv.local";
 
 /* ─── In-memory read-through cache (short TTL) ─── */
 
-const DEFAULT_CACHE_TTL_MS = 30_000; // 30 seconds
+const DEFAULT_CACHE_TTL_MS = 10_000; // 10 seconds
 
 interface CacheEntry {
   value: string | null;

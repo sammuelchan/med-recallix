@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       }
       if (tKv - t0 > 1000) console.warn(`[perf] GET /api/knowledge?ids total=${(tKv-t0).toFixed(0)}ms auth=${(tAuth-t0).toFixed(0)}ms import=${(tImport-tAuth).toFixed(0)}ms kv=${(tKv-tImport).toFixed(0)}ms`);
       const batchRes = NextResponse.json({ success: true, data: map });
-      batchRes.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
+      batchRes.headers.set("Cache-Control", "private, max-age=5, stale-while-revalidate=30");
       return batchRes;
     }
 
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
     if (tList - t0 > 1000) console.warn(`[perf] GET /api/knowledge total=${(tList-t0).toFixed(0)}ms auth=${(tAuth-t0).toFixed(0)}ms list=${(tList-tAuth).toFixed(0)}ms`);
     const res = NextResponse.json({ success: true, data: items });
-    res.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
+    res.headers.set("Cache-Control", "private, max-age=5, stale-while-revalidate=30");
     return res;
   } catch (err) {
     if (performance.now() - t0 > 1000) console.warn(`[perf] GET /api/knowledge ERROR total=${(performance.now()-t0).toFixed(0)}ms`);
