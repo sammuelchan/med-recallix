@@ -27,8 +27,12 @@ export default function DashboardPage() {
 
   const handleRefresh = useCallback(async () => {
     invalidateCache("/api/cards?status=summary");
-    await loadData();
-  }, [loadData]);
+    const json = await cachedFetch<{ success: boolean; data?: { summary: DueSummary; streak: StreakData } }>("/api/cards?status=summary", { ttl: 10_000, force: true });
+    if (json.success && json.data) {
+      setSummary(json.data.summary);
+      setStreak(json.data.streak);
+    }
+  }, []);
 
   const totalDue = summary ? summary.due + summary.overdue + summary.newToday : 0;
 

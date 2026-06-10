@@ -28,8 +28,9 @@ export default function KnowledgePage() {
 
   const handleRefresh = useCallback(async () => {
     invalidateCache("/api/knowledge");
-    await loadData();
-  }, [loadData]);
+    const json = await cachedFetch<{ success: boolean; data?: KPIndexItem[] }>("/api/knowledge", { ttl: 15_000, force: true });
+    if (json.success && json.data) setItems(json.data);
+  }, []);
 
   const categories = useMemo(() => {
     const catSet = new Set<string>();

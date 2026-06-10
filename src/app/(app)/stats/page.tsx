@@ -175,8 +175,15 @@ export default function StatsPage() {
     invalidateCache("/api/stats?section=core");
     invalidateCache("/api/stats?section=chart");
     invalidateCache("/api/stats?section=quiz");
-    loadData();
-  }, [loadData]);
+    await Promise.all([
+      cachedFetch<{ success: boolean; data?: CoreData }>("/api/stats?section=core", { ttl: 15_000, force: true })
+        .then((json) => { if (json.success && json.data) setCore(json.data); }),
+      cachedFetch<{ success: boolean; data?: ChartData }>("/api/stats?section=chart", { ttl: 15_000, force: true })
+        .then((json) => { if (json.success && json.data) setChart(json.data); }),
+      cachedFetch<{ success: boolean; data?: QuizData }>("/api/stats?section=quiz", { ttl: 15_000, force: true })
+        .then((json) => { if (json.success && json.data) setQuiz(json.data); }),
+    ]);
+  }, []);
 
   if (error && !core) {
     return (
