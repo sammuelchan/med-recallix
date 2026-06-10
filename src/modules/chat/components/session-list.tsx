@@ -57,13 +57,14 @@ export function SessionList({
             </p>
           </div>
           <button
-            className="hidden size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-hover:flex"
+            className="flex size-9 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive active:bg-destructive/20"
+            aria-label="删除对话"
             onClick={(e) => {
               e.stopPropagation();
               onDelete(s.sessionId);
             }}
           >
-            <Trash2 className="size-3.5" />
+            <Trash2 className="size-4" />
           </button>
         </div>
       ))}

@@ -321,7 +321,7 @@ export function AIQASheet({ open, onOpenChange, onMerge, context }: AIQASheetPro
                 }
               }}
               placeholder="输入你的需求，如：生成5个问答对..."
-              className="min-h-[40px] max-h-24 resize-none rounded-xl text-sm"
+              className="min-h-[44px] max-h-24 resize-none rounded-xl text-base"
               rows={1}
               disabled={isStreaming}
             />

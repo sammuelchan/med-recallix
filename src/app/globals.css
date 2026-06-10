@@ -123,6 +123,13 @@
   padding-right: env(safe-area-inset-right);
 }
 
+/* 虚拟键盘弹出时自动收缩布局高度，防止输入框被遮挡 */
+@supports (height: 100dvh) {
+  html, body {
+    height: 100dvh;
+  }
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

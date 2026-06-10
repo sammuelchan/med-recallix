@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Header, PageContainer } from "@/shared/components/layout";
 import { Flame, BookOpen, Brain, Clock, TrendingUp, Trophy, Plus, RotateCcw, FileText } from "lucide-react";
-import { cachedFetch } from "@/shared/lib/fetch-cache";
+import { cachedFetch, invalidateCache } from "@/shared/lib/fetch-cache";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import type { StreakData } from "@/modules/review";
 import type { DailyEpisode } from "@/modules/agent";
@@ -171,6 +171,13 @@ export default function StatsPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const handleRefresh = useCallback(async () => {
+    invalidateCache("/api/stats?section=core");
+    invalidateCache("/api/stats?section=chart");
+    invalidateCache("/api/stats?section=quiz");
+    loadData();
+  }, [loadData]);
+
   if (error && !core) {
     return (
       <>
@@ -195,7 +202,7 @@ export default function StatsPage() {
   return (
     <>
       <Header title="学习统计" />
-      <PageContainer>
+      <PageContainer onRefresh={handleRefresh}>
         <div className="space-y-5">
           {/* Empty State */}
           {isEmpty && (

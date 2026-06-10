@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { SendHorizonal } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Textarea } from "@/shared/components/ui/textarea";
@@ -13,6 +13,20 @@ interface ChatInputProps {
 export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 虚拟键盘弹出时确保输入框可见
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      if (containerRef.current && document.activeElement === textareaRef.current) {
+        containerRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
+      }
+    };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
@@ -23,7 +37,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   }, [value, disabled, onSend]);
 
   return (
-    <div className="border-t bg-background p-3 safe-bottom">
+    <div ref={containerRef} className="border-t bg-background p-3 safe-bottom">
       <div className="mx-auto flex max-w-lg items-end gap-2">
         <Textarea
           ref={textareaRef}
@@ -35,8 +49,13 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
               handleSend();
             }
           }}
+          onFocus={() => {
+            setTimeout(() => {
+              containerRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+            }, 300);
+          }}
           placeholder="输入你的问题…"
-          className="min-h-[44px] max-h-32 resize-none rounded-xl"
+          className="min-h-[44px] max-h-32 resize-none rounded-xl text-base"
           rows={1}
           disabled={disabled}
         />

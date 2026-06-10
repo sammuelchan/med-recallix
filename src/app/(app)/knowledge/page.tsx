@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { Header } from "@/shared/components/layout";
 import { PageContainer } from "@/shared/components/layout";
 import { Input } from "@/shared/components/ui/input";
 import { KnowledgeCard } from "@/modules/knowledge/components/knowledge-card";
 import { Plus, Search, X, Sparkles } from "lucide-react";
-import { cachedFetch } from "@/shared/lib/fetch-cache";
+import { cachedFetch, invalidateCache } from "@/shared/lib/fetch-cache";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import type { KPIndexItem } from "@/modules/knowledge";
 
@@ -17,13 +17,19 @@ export default function KnowledgePage() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  useEffect(() => {
-    cachedFetch<{ success: boolean; data?: KPIndexItem[] }>("/api/knowledge", { ttl: 15_000 })
-      .then((json) => {
-        if (json.success && json.data) setItems(json.data);
-      })
-      .finally(() => setLoading(false));
+  const loadData = useCallback(async () => {
+    const json = await cachedFetch<{ success: boolean; data?: KPIndexItem[] }>("/api/knowledge", { ttl: 15_000 });
+    if (json.success && json.data) setItems(json.data);
   }, []);
+
+  useEffect(() => {
+    loadData().finally(() => setLoading(false));
+  }, [loadData]);
+
+  const handleRefresh = useCallback(async () => {
+    invalidateCache("/api/knowledge");
+    await loadData();
+  }, [loadData]);
 
   const categories = useMemo(() => {
     const catSet = new Set<string>();
@@ -87,7 +93,7 @@ export default function KnowledgePage() {
           </div>
         }
       />
-      <PageContainer>
+      <PageContainer onRefresh={handleRefresh}>
         <div className="space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Header } from "@/shared/components/layout";
 import { PageContainer } from "@/shared/components/layout";
 import { Button } from "@/shared/components/ui/button";
 import { Flame, BarChart3 } from "lucide-react";
 import { AIConfigBanner } from "@/shared/components/ai-config-banner";
-import { cachedFetch } from "@/shared/lib/fetch-cache";
+import { cachedFetch, invalidateCache } from "@/shared/lib/fetch-cache";
 import { DailyQuizCard } from "@/modules/daily-quiz/components/DailyQuizCard";
 import type { DueSummary, StreakData } from "@/modules/review";
 
@@ -15,16 +15,20 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DueSummary | null>(null);
   const [streak, setStreak] = useState<StreakData | null>(null);
 
-  useEffect(() => {
-    cachedFetch<{ success: boolean; data?: { summary: DueSummary; streak: StreakData } }>("/api/cards?status=summary", { ttl: 10_000 })
-      .then((json) => {
-        if (json.success && json.data) {
-          setSummary(json.data.summary);
-          setStreak(json.data.streak);
-        }
-      })
-      .catch(() => {});
+  const loadData = useCallback(async () => {
+    const json = await cachedFetch<{ success: boolean; data?: { summary: DueSummary; streak: StreakData } }>("/api/cards?status=summary", { ttl: 10_000 });
+    if (json.success && json.data) {
+      setSummary(json.data.summary);
+      setStreak(json.data.streak);
+    }
   }, []);
+
+  useEffect(() => { loadData().catch(() => {}); }, [loadData]);
+
+  const handleRefresh = useCallback(async () => {
+    invalidateCache("/api/cards?status=summary");
+    await loadData();
+  }, [loadData]);
 
   const totalDue = summary ? summary.due + summary.overdue + summary.newToday : 0;
 
@@ -40,7 +44,7 @@ export default function DashboardPage() {
           </Link>
         }
       />
-      <PageContainer>
+      <PageContainer onRefresh={handleRefresh}>
         <div className="space-y-6">
           <AIConfigBanner />
 
