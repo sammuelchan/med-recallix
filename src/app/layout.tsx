@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s | Med-Recallix",
   },
   description: "医考记忆助手 — 基于 SM-2 间隔重复的智能复习系统",
-  manifest: "/manifest.json",
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -26,6 +26,12 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Viewport 配置：
+ *   - viewportFit: "cover" 让 env(safe-area-inset-*) 生效
+ *   - maximumScale: 5 允许辅助功能缩放（不再锁定为 1）
+ *   - themeColor 跟随系统暗色模式
+ */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

@@ -1,11 +1,15 @@
 /**
- * Bottom Navigation Bar — mobile-first tab bar at viewport bottom.
+ * 底部导航栏 — 移动端主导航
  *
- * Five tabs: Dashboard, Knowledge, Review, Chat, Settings.
- * Active state is determined by matching the current pathname prefix.
- * Uses a solid background (non-floating, non-transparent) to avoid
- * occluding content. Takes real space in the flex layout.
- * Prefetches API data on touch/hover to reduce perceived latency.
+ * 五个 Tab：首页、知识点、复习、对话、设置。
+ *
+ * 关键设计：
+ *   - 不使用 fixed/absolute，而是 flex sibling（shrink-0），不遮挡内容
+ *   - safe-bottom 适配 iPhone 底部横条
+ *   - 沉浸式路由（daily-quiz/review/exam/chat）返回 null 隐藏自身
+ *   - onTouchStart 触发 prefetch，用户手指还在屏幕上时数据已在路上
+ *   - aria-current="page" 标注当前活跃 tab，利于屏幕阅读器
+ *   - min-h-11 (44px) 保证触控面积符合 iOS HIG 标准
  */
 "use client";
 

@@ -1,3 +1,9 @@
+/**
+ * PWA Web App Manifest
+ *
+ * Next.js 自动将此文件 serve 为 /manifest.webmanifest。
+ * 定义了 app 名称、图标、显示模式等安装到桌面后的行为。
+ */
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
@@ -13,6 +19,7 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
       { src: "/icons/icon.svg", sizes: "any", type: "image/svg+xml" },
     ],
   };

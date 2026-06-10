@@ -448,8 +448,8 @@ export default function DailyQuizPage() {
                   onClick={() => handleSelect(opt.label)}
                   disabled={!!feedback || submitting}
                   className={cn(
-                    "flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-all",
-                    !feedback && !isSelected && "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50",
+                    "flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-all active:scale-[0.98]",
+                    !feedback && !isSelected && "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 active:bg-blue-50/80",
                     !feedback && isSelected && "border-blue-400 bg-blue-50",
                     isCorrect && "border-green-400 bg-green-50",
                     isWrong && "border-red-400 bg-red-50",

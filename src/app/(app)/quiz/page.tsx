@@ -121,10 +121,10 @@ export default function QuizPage() {
                       key={kp.id}
                       onClick={() => toggleSelect(kp.id)}
                       className={cn(
-                        "w-full rounded-xl border p-3 text-left transition-colors",
+                        "w-full rounded-xl border p-3 text-left transition-colors active:scale-[0.98]",
                         selected.has(kp.id)
                           ? "border-primary bg-primary/5"
-                          : "hover:bg-muted/50",
+                          : "hover:bg-muted/50 active:bg-muted/50",
                       )}
                     >
                       <p className="font-medium text-sm">{kp.title}</p>
@@ -178,7 +178,7 @@ export default function QuizPage() {
                     key={opt.label}
                     onClick={() => selectAnswer(q.id, opt.label)}
                     className={cn(
-                      "w-full rounded-xl border p-3 text-left transition-colors flex gap-3",
+                      "w-full rounded-xl border p-3 text-left transition-colors flex gap-3 active:scale-[0.98]",
                       optStyle,
                     )}
                   >
