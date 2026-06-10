@@ -112,7 +112,8 @@ export default function ReviewPage() {
       const res = await fetch("/api/cards?all=true");
       const json = await res.json();
       if (json.success) {
-        const today = new Date().toISOString().slice(0, 10);
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
         const notDue = (json.data as CardIndexItem[]).filter((c) => c.dueDate > today);
         setAllCards(notDue);
         setSelectedIds(new Set(notDue.map((c) => c.id)));
@@ -258,6 +259,12 @@ export default function ReviewPage() {
     if (!kpData?.qaItems || kpData.qaItems.length === 0) return null;
     return kpData.qaItems;
   }, [kpData]);
+
+  useEffect(() => {
+    if (!kpData && !loadingKP && currentCard && mode !== "card") {
+      loadKPData(currentCard.knowledgePointId);
+    }
+  }, [kpData, loadingKP, currentCard, loadKPData, mode]);
 
   async function handleFlip() {
     if (!flipped && currentCard) {
@@ -637,13 +644,6 @@ export default function ReviewPage() {
   }
 
   // --- QA / Fill-blank mode ---
-  // Load KP data via useEffect to avoid StrictMode double-fire
-  useEffect(() => {
-    if (!kpData && !loadingKP && currentCard) {
-      loadKPData(currentCard.knowledgePointId);
-    }
-  }, [kpData, loadingKP, currentCard, loadKPData]);
-
   const isQAMode = mode === "qa";
   const isFillMode = mode === "fill-blank";
 

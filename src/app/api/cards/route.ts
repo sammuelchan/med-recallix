@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ReviewService } from "@/modules/review";
 import { getUserId } from "@/shared/lib/get-user-id";
 import { StatsSnapshotService } from "@/shared/services/stats-snapshot";
+import { toLocalDateString } from "@/shared/lib/utils";
 
 export async function GET(req: NextRequest) {
   try {
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
         ReviewService.getStreak(userId),
       ]);
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toLocalDateString();
       let due = 0;
       let overdue = 0;
       let newToday = 0;
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
     }
 
     const index = await ReviewService.getCardIndex(userId);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDateString();
     const dueCards = index.filter((item) => item.dueDate <= today);
     const res = NextResponse.json({ success: true, data: dueCards });
     res.headers.set("Cache-Control", "private, max-age=10, stale-while-revalidate=20");
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
     try { body = await req.json(); } catch { /* empty body = reset all */ }
 
     const index = await ReviewService.getCardIndex(userId);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDateString();
 
     // If cardIds provided, reset only those; otherwise reset all non-due cards
     const idsToReset = body.cardIds

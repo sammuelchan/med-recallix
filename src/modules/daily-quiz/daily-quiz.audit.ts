@@ -7,8 +7,8 @@ import type {
   DailyQuizAuditLog,
 } from "./daily-quiz.types";
 
-const AUDIT_RETENTION_DAYS = 7;
-const MAX_ENTRIES_PER_DAY = 200;
+const AUDIT_RETENTION_DAYS = 2;
+const MAX_ENTRIES_PER_DAY = 5;
 
 export const DailyQuizAuditService = {
   async append(
@@ -63,7 +63,7 @@ export const DailyQuizAuditService = {
   async cleanupExpiredLogs(userId: string): Promise<void> {
     const deletePromises: Promise<void>[] = [];
 
-    for (let i = AUDIT_RETENTION_DAYS + 1; i <= AUDIT_RETENTION_DAYS + 14; i++) {
+    for (let i = AUDIT_RETENTION_DAYS + 1; i <= AUDIT_RETENTION_DAYS + 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = toISODateString(d);

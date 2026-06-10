@@ -37,8 +37,9 @@ function formatDate(dateStr: string): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
 
-  if (dateStr === today.toISOString().slice(0, 10)) return "今天";
-  if (dateStr === yesterday.toISOString().slice(0, 10)) return "昨天";
+  const fmt = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  if (dateStr === fmt(today)) return "今天";
+  if (dateStr === fmt(yesterday)) return "昨天";
 
   return d.toLocaleDateString("zh-CN", { month: "long", day: "numeric" });
 }

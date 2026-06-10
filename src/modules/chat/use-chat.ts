@@ -50,6 +50,12 @@ export function useChatStream() {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     cachedFetch<{ success: boolean; data?: { hasProfile: boolean } }>("/api/profile", { ttl: 60_000 })
       .then((json) => {
         if (json.success) {

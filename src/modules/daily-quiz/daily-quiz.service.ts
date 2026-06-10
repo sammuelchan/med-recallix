@@ -5,7 +5,7 @@ import { generateId, toISODateString } from "@/shared/lib/utils";
 import { ReviewService } from "@/modules/review";
 import { KnowledgeService } from "@/modules/knowledge";
 import { EpisodeService } from "@/modules/agent";
-import { buildDailyQuizPrompt } from "./daily-quiz.prompts";
+import { buildDailyQuizPrompt, buildDistractorPrompt } from "./daily-quiz.prompts";
 import {
   calculateWeight,
   incrementError,
@@ -571,137 +571,188 @@ export const DailyQuizService = {
     const errorSet = new Set(selection.errorReview);
     const weakSet = new Set(selection.weakArea);
 
-    // Phase 1: Extract questions from KP's built-in QA pairs (instant, no AI needed)
-    const qaQuestions = this.extractQAQuestions(validKps, batchSize, errorSet, weakSet);
-    if (qaQuestions.length > 0) {
-      DailyQuizAuditService.append(userId, "generate_batch_ok", `从知识点 QA 直接生成 ${qaQuestions.length} 题（无需 AI）`, { questionCount: qaQuestions.length, durationMs: 0 }).catch(() => {});
-    }
+    // Phase 1: Collect QA pairs from KPs (question + correct answer are reliable)
+    // QA occupies at most 2/3; AI at least 1/3
+    const qaMaxRatio = validKps.length <= 3 ? 0.3 : validKps.length <= 6 ? 0.5 : 0.65;
+    const qaLimit = Math.max(2, Math.floor(batchSize * qaMaxRatio));
+    const rawQAs = this.collectQAPairs(validKps, qaLimit, errorSet, weakSet);
 
-    if (qaQuestions.length >= batchSize) {
-      return qaQuestions.slice(0, batchSize);
-    }
-
-    // Phase 2: Supplement with AI-generated questions
-    const aiNeeded = batchSize - qaQuestions.length;
     const config = await getAIConfig();
     if (!config.apiKey || config.apiKey.length < 10) {
-      DailyQuizAuditService.append(userId, "ai_key_missing", `AI API Key 未配置，已用 QA 生成 ${qaQuestions.length} 题`).catch(() => {});
-      if (qaQuestions.length > 0) return qaQuestions;
+      DailyQuizAuditService.append(userId, "ai_key_missing", `AI API Key 未配置，无法生成`).catch(() => {});
       return this.getFallbackQuestions(userId, batchSize);
     }
 
-    // Load user feedback to avoid repeating past mistakes
+    const client = createAIClient(config);
     const feedbackContext = await this.buildFeedbackContext(userId);
+    const aiStart = Date.now();
 
-    const prompt = buildDailyQuizPrompt(
-      validKps.map((kp) => ({ title: kp.title, content: kp.content })),
-      aiNeeded,
-      feedbackContext,
-    );
+    // Phase 2: AI generates distractors for QA items + pure AI questions in parallel
+    const aiNeeded = batchSize - rawQAs.length;
+    const qaQuestions: DailyQuizQuestion[] = [];
+    const aiQuestions: DailyQuizQuestion[] = [];
 
     try {
-      const client = createAIClient(config);
-      const aiStart = Date.now();
-      const { text } = await generateText({
-        model: client(config.model),
-        prompt,
-        temperature: 0.7,
-      });
-      const aiDuration = Date.now() - aiStart;
+      const promises: Promise<void>[] = [];
 
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 返回内容无法解析为 JSON 数组`, { durationMs: aiDuration, error: `响应前100字: ${text.slice(0, 100)}` }).catch(() => {});
-        if (qaQuestions.length > 0) return qaQuestions;
+      // 2a: Generate AI distractors for QA-sourced questions
+      if (rawQAs.length > 0) {
+        promises.push(
+          (async () => {
+            const distractorPrompt = buildDistractorPrompt(
+              rawQAs.map((item) => ({
+                question: item.qa.question,
+                answer: item.qa.answer,
+                kpTitle: item.kp.title,
+              })),
+            );
+            try {
+              const { text } = await generateText({
+                model: client(config.model),
+                prompt: distractorPrompt,
+                temperature: 0.5,
+              });
+              const jsonMatch = text.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]) as Array<{ distractors: string[] }>;
+                for (let i = 0; i < rawQAs.length && i < parsed.length; i++) {
+                  const item = rawQAs[i];
+                  const distractors = (parsed[i]?.distractors ?? []).filter(
+                    (d) => d && d.trim().length > 0 && d.trim() !== item.qa.answer.trim(),
+                  ).slice(0, 3);
+                  if (distractors.length < 3) continue;
+
+                  const correctAnswer = item.qa.answer.trim();
+                  const correctIdx = Math.floor(Math.random() * 4);
+                  const allOptions = [...distractors];
+                  allOptions.splice(correctIdx, 0, correctAnswer);
+                  const relabeled = allOptions.map((t, idx) => ({
+                    label: String.fromCharCode(65 + idx),
+                    text: t,
+                  }));
+
+                  qaQuestions.push({
+                    id: generateId(),
+                    stem: item.qa.question,
+                    options: relabeled,
+                    answer: String.fromCharCode(65 + correctIdx),
+                    explanation: `【答案分析】正确答案为${String.fromCharCode(65 + correctIdx)}（${correctAnswer}）。本题考查知识点「${item.kp.title}」。`,
+                    sourceKpId: item.kp.id,
+                    sourceType: item.sourceType,
+                    generatedBy: "qa_pair" as const,
+                  });
+                }
+              }
+            } catch { /* distractor generation failed, skip QA items */ }
+          })(),
+        );
+      }
+
+      // 2b: Generate pure AI questions
+      if (aiNeeded > 0) {
+        promises.push(
+          (async () => {
+            const prompt = buildDailyQuizPrompt(
+              validKps.map((kp) => ({ title: kp.title, content: kp.content })),
+              aiNeeded,
+              feedbackContext,
+            );
+            const { text } = await generateText({
+              model: client(config.model),
+              prompt,
+              temperature: 0.7,
+            });
+            const jsonMatch = text.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) return;
+
+            const raw = JSON.parse(jsonMatch[0]) as Array<{
+              stem: string;
+              options: Array<{ label: string; text: string }>;
+              answer: string;
+              explanation: string;
+            }>;
+
+            const validLabels = new Set(["A", "B", "C", "D", "E"]);
+            for (let i = 0; i < raw.length; i++) {
+              const q = raw[i];
+              if (!q.stem || !q.options || !q.answer || !q.explanation) continue;
+              if (!validLabels.has(q.answer)) continue;
+              if (q.options.length < 4) continue;
+              const optionLabels = new Set(q.options.map((o) => o.label));
+              if (!optionLabels.has(q.answer)) continue;
+              const optionTexts = q.options.map((o) => o.text?.trim()).filter(Boolean);
+              if (optionTexts.length < 4) continue;
+              if (optionTexts.some((t) => t.length < 2)) continue;
+              const uniqueTexts = new Set(optionTexts);
+              if (uniqueTexts.size < optionTexts.length) continue;
+              if (q.stem.trim().length < 10) continue;
+
+              const kp = validKps[i % validKps.length];
+              let sourceType: DailyQuizQuestion["sourceType"] = "new_coverage";
+              if (kp && errorSet.has(kp.id)) sourceType = "error_review";
+              else if (kp && weakSet.has(kp.id)) sourceType = "weak_area";
+
+              aiQuestions.push({
+                id: generateId(),
+                stem: q.stem,
+                options: q.options,
+                answer: q.answer,
+                explanation: q.explanation,
+                sourceKpId: kp?.id ?? "",
+                sourceType,
+                generatedBy: "ai",
+              });
+            }
+          })(),
+        );
+      }
+
+      await Promise.all(promises);
+      const durationMs = Date.now() - aiStart;
+
+      if (qaQuestions.length === 0 && aiQuestions.length === 0) {
+        DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 生成 0 题通过校验`, { durationMs }).catch(() => {});
         return this.getFallbackQuestions(userId, batchSize);
       }
 
-      const raw = JSON.parse(jsonMatch[0]) as Array<{
-        stem: string;
-        options: Array<{ label: string; text: string }>;
-        answer: string;
-        explanation: string;
-      }>;
+      DailyQuizAuditService.append(userId, "generate_batch_ok", `生成完成：QA ${qaQuestions.length} 题 + AI ${aiQuestions.length} 题`, { questionCount: qaQuestions.length + aiQuestions.length, durationMs }).catch(() => {});
 
-      const validLabels = new Set(["A", "B", "C", "D", "E"]);
-      const aiQuestions: DailyQuizQuestion[] = [];
-
-      for (let i = 0; i < raw.length; i++) {
-        const q = raw[i];
-        // 基础字段校验
-        if (!q.stem || !q.options || !q.answer || !q.explanation) continue;
-        if (!validLabels.has(q.answer)) continue;
-        if (q.options.length < 4) continue;
-
-        // 答案标签必须在选项中
-        const optionLabels = new Set(q.options.map((o) => o.label));
-        if (!optionLabels.has(q.answer)) continue;
-
-        // 选项内容质量校验
-        const optionTexts = q.options.map((o) => o.text?.trim()).filter(Boolean);
-        if (optionTexts.length < 4) continue;
-        // 选项不能太短（<2字）或存在重复
-        if (optionTexts.some((t) => t.length < 2)) continue;
-        const uniqueTexts = new Set(optionTexts);
-        if (uniqueTexts.size < optionTexts.length) continue;
-
-        // 题干不能太短（至少10字的完整句子）
-        if (q.stem.trim().length < 10) continue;
-
-        const kp = validKps[i % validKps.length];
-        let sourceType: DailyQuizQuestion["sourceType"] = "new_coverage";
-        if (kp && errorSet.has(kp.id)) sourceType = "error_review";
-        else if (kp && weakSet.has(kp.id)) sourceType = "weak_area";
-
-        aiQuestions.push({
-          id: generateId(),
-          stem: q.stem,
-          options: q.options,
-          answer: q.answer,
-          explanation: q.explanation,
-          sourceKpId: kp?.id ?? "",
-          sourceType,
-          generatedBy: "ai",
-        });
+      // Shuffle all questions together
+      const combined = [...qaQuestions, ...aiQuestions];
+      for (let i = combined.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [combined[i], combined[j]] = [combined[j], combined[i]];
       }
-
-      if (aiQuestions.length === 0 && qaQuestions.length === 0) {
-        DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 生成 ${raw.length} 题但全部未通过校验`, { durationMs: aiDuration }).catch(() => {});
-        return this.getFallbackQuestions(userId, batchSize);
-      }
-
-      return [...qaQuestions, ...aiQuestions];
+      return combined;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 调用异常`, { error: errorMsg }).catch(() => {});
-      if (qaQuestions.length > 0) return qaQuestions;
       return this.getFallbackQuestions(userId, batchSize);
     }
   },
 
   /**
-   * 从知识点内置 QA 对转为选择题格式。
-   *
-   * 核心策略:
-   * - 正确答案来自 QA 对的 answer 字段
-   * - 干扰项优先从**同一知识点**的其他 QA 答案中选取（同领域保证）
-   * - 次优先从**同分类**的其他 KP 的 QA 答案中选取
-   * - 最后才从所有 QA 答案中兜底（仍比随机 KP 标题好）
-   * - 生成的 explanation 包含答案分析
+   * Collect QA pairs from knowledge points for AI distractor generation.
+   * Returns raw QA items with metadata; does NOT build full questions
+   * (distractors will be generated by AI for quality).
    */
-  extractQAQuestions(
+  collectQAPairs(
     kps: KnowledgePoint[],
     maxCount: number,
     errorSet: Set<string>,
     weakSet: Set<string>,
-  ): DailyQuizQuestion[] {
-    const allQAs: { kp: KnowledgePoint; qa: { question: string; answer: string } }[] = [];
+  ): { kp: KnowledgePoint; qa: { question: string; answer: string }; sourceType: DailyQuizQuestion["sourceType"] }[] {
+    const allQAs: { kp: KnowledgePoint; qa: { question: string; answer: string }; sourceType: DailyQuizQuestion["sourceType"] }[] = [];
 
     for (const kp of kps) {
       if (kp.qaItems && kp.qaItems.length > 0) {
+        let sourceType: DailyQuizQuestion["sourceType"] = "new_coverage";
+        if (errorSet.has(kp.id)) sourceType = "error_review";
+        else if (weakSet.has(kp.id)) sourceType = "weak_area";
+
         for (const qa of kp.qaItems) {
-          if (qa.question && qa.answer) {
-            allQAs.push({ kp, qa });
+          if (qa.question && qa.answer && qa.question.trim().length >= 5 && qa.answer.trim().length >= 2) {
+            allQAs.push({ kp, qa, sourceType });
           }
         }
       }
@@ -709,116 +760,12 @@ export const DailyQuizService = {
 
     if (allQAs.length === 0) return [];
 
-    const shuffled = allQAs.sort(() => Math.random() - 0.5).slice(0, maxCount);
-
-    // Pre-build distractor pools by KP and by category for semantic relevance
-    const answersByKpId = new Map<string, string[]>();
-    const answersByCategory = new Map<string, string[]>();
-    for (const item of allQAs) {
-      const kpAnswers = answersByKpId.get(item.kp.id) ?? [];
-      kpAnswers.push(item.qa.answer);
-      answersByKpId.set(item.kp.id, kpAnswers);
-
-      const cats = item.kp.category ?? [];
-      for (const cat of cats) {
-        const catAnswers = answersByCategory.get(cat) ?? [];
-        catAnswers.push(item.qa.answer);
-        answersByCategory.set(cat, catAnswers);
-      }
+    // Shuffle and limit
+    for (let i = allQAs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allQAs[i], allQAs[j]] = [allQAs[j], allQAs[i]];
     }
-
-    return shuffled.map((item) => {
-      const { kp, qa } = item;
-      const distractors = this.pickDistractors(qa.answer, kp, answersByKpId, answersByCategory, allQAs);
-      const options = [
-        { label: "A", text: qa.answer },
-        ...distractors.map((d, i) => ({ label: String.fromCharCode(66 + i), text: d })),
-      ];
-
-      const shuffledOptions = options.sort(() => Math.random() - 0.5);
-      const relabeled = shuffledOptions.map((o, i) => ({
-        label: String.fromCharCode(65 + i),
-        text: o.text,
-      }));
-      const finalAnswer = relabeled.find((o) => o.text === qa.answer)?.label ?? "A";
-
-      let sourceType: DailyQuizQuestion["sourceType"] = "new_coverage";
-      if (errorSet.has(kp.id)) sourceType = "error_review";
-      else if (weakSet.has(kp.id)) sourceType = "weak_area";
-
-      return {
-        id: generateId(),
-        stem: qa.question,
-        options: relabeled,
-        answer: finalAnswer,
-        explanation: `【答案分析】正确答案为${finalAnswer}（${qa.answer}）。本题考查知识点「${kp.title}」。`,
-        sourceKpId: kp.id,
-        sourceType,
-        generatedBy: "qa_pair" as const,
-      };
-    });
-  },
-
-  /**
-   * 选取 4 个干扰项。按语义相关度分层:
-   *
-   * 1. 同一知识点的其他 QA 答案（最佳，同一概念不同细节）
-   * 2. 同分类知识点的 QA 答案（次优，同领域同维度）
-   * 3. 所有 QA 答案（兜底，至少都是医学概念）
-   *
-   * 严禁使用 KP 标题或通用 filler（如"以上都不是"）作为干扰项
-   */
-  pickDistractors(
-    correct: string,
-    sourceKp: KnowledgePoint,
-    answersByKpId: Map<string, string[]>,
-    answersByCategory: Map<string, string[]>,
-    allQAs: { kp: KnowledgePoint; qa: { question: string; answer: string } }[],
-  ): string[] {
-    const used = new Set<string>([correct]);
-    const result: string[] = [];
-
-    const addFromPool = (pool: string[]) => {
-      const shuffled = [...pool].sort(() => Math.random() - 0.5);
-      for (const item of shuffled) {
-        if (result.length >= 4) return;
-        if (!used.has(item) && item.length > 0) {
-          used.add(item);
-          result.push(item);
-        }
-      }
-    };
-
-    // Layer 1: same KP's other QA answers
-    const sameKpAnswers = answersByKpId.get(sourceKp.id) ?? [];
-    addFromPool(sameKpAnswers);
-
-    // Layer 2: same category KP's QA answers
-    if (result.length < 4) {
-      const categories = sourceKp.category ?? [];
-      for (const cat of categories) {
-        if (result.length >= 4) break;
-        const catAnswers = answersByCategory.get(cat) ?? [];
-        addFromPool(catAnswers);
-      }
-    }
-
-    // Layer 3: all QA answers (still medical concepts, better than random titles)
-    if (result.length < 4) {
-      const allAnswers = allQAs.map((item) => item.qa.answer);
-      addFromPool(allAnswers);
-    }
-
-    // Layer 4 (absolute fallback): use content fragments from same KP
-    if (result.length < 4 && sourceKp.content) {
-      const sentences = sourceKp.content
-        .split(/[。；\n]/)
-        .map((s) => s.trim())
-        .filter((s) => s.length >= 4 && s.length <= 30 && s !== correct);
-      addFromPool(sentences);
-    }
-
-    return result.slice(0, 4);
+    return allQAs.slice(0, maxCount);
   },
 
   async getFallbackQuestions(

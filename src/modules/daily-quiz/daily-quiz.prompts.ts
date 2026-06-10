@@ -46,6 +46,35 @@ ${feedbackSection}
 ]`;
 }
 
+export function buildDistractorPrompt(
+  qaItems: { question: string; answer: string; kpTitle: string }[],
+): string {
+  const items = qaItems
+    .map(
+      (item, i) =>
+        `${i + 1}. 题目：${item.question}\n   正确答案：${item.answer}\n   所属知识点：${item.kpTitle}`,
+    )
+    .join("\n\n");
+
+  return `你是一位资深医学考试出题专家。我有以下 ${qaItems.length} 道题目，每道题已有正确答案。请为每道题生成 3 个高质量的干扰选项。
+
+${items}
+
+**干扰选项核心要求：**
+1. **同类别同维度**：干扰项必须与正确答案属于同一类型（如都是药物名、都是症状、都是检查方法）
+2. **具有迷惑性**：选择该领域中容易混淆的相近概念，让考生需要真正理解才能区分
+3. **长度相近**：干扰项的字数应与正确答案接近
+4. **禁止明显错误**：不得使用与题目完全无关的选项、笼统选项（如"以上都不是"）
+
+严格按以下 JSON 格式输出，不要输出其他内容：
+[
+  {"distractors": ["干扰项1", "干扰项2", "干扰项3"]},
+  {"distractors": ["干扰项1", "干扰项2", "干扰项3"]}
+]
+
+每个对象对应一道题，按顺序对应上面的题目。`;
+}
+
 export function buildErrorReviewPrompt(
   kpContent: string,
   kpTitle: string,
