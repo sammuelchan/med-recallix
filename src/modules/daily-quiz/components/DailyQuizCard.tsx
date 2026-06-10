@@ -26,7 +26,9 @@ export function DailyQuizCard() {
         const res = await fetch("/api/daily-quiz");
         const json = await res.json();
         if (!json.success) {
-          setState({ status: null, loading: false, error: json.error });
+          // 防止 EdgeOne 超时返回 error 为对象时触发 React #310
+          const errMsg = typeof json.error === "string" ? json.error : "加载失败";
+          setState({ status: null, loading: false, error: errMsg });
           return;
         }
 
@@ -77,7 +79,8 @@ export function DailyQuizCard() {
                 startPolling();
               }
             } else {
-              setState({ status: null, loading: false, error: genJson.error ?? "生成失败" });
+              const errMsg = typeof genJson.error === "string" ? genJson.error : "生成失败";
+              setState({ status: null, loading: false, error: errMsg });
             }
           } catch {
             setState({ status: null, loading: false, error: "网络连接失败" });
@@ -161,11 +164,12 @@ export function DailyQuizCard() {
                   } else {
                     setState({ status: "generating", readyCount: q.readyCount ?? 0, totalCount: q.totalCount ?? 50, loading: false });
                   }
-                  } else {
-                    setState({ status: null, loading: false, error: json.error ?? "生成失败" });
-                  }
-                })
-                .catch(() => setState({ status: null, loading: false, error: "网络连接失败" }));
+                } else {
+                  const errMsg = typeof json.error === "string" ? json.error : "生成失败";
+                  setState({ status: null, loading: false, error: errMsg });
+                }
+              })
+              .catch(() => setState({ status: null, loading: false, error: "网络连接失败" }));
             }}
             className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300"
           >

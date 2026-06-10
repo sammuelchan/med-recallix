@@ -32,6 +32,8 @@ export interface DailyQuizSet {
   readyCount: number;
   generatedAt: string;
   completedAt?: string;
+  /** 续生开始时间戳；用作节流锁，60s 内不重复触发 AI 生成 */
+  continuingAt?: string;
 }
 
 export interface DailyQuizProgress {

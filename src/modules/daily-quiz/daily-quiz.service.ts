@@ -164,6 +164,18 @@ export const DailyQuizService = {
       return quizSet;
     }
 
+    // 节流防重: 若上一次续生在 60s 内启动，跳过本次（防止并发 poll 重复触发 AI）
+    if (quizSet.continuingAt) {
+      const elapsed = Date.now() - new Date(quizSet.continuingAt).getTime();
+      if (elapsed < 60_000) {
+        return quizSet;
+      }
+    }
+
+    // 标记续生开始时间（KV 轻量锁，60s 自动过期兜底）
+    quizSet.continuingAt = new Date().toISOString();
+    await kvPut(kvKeys.dailyQuiz(userId, today), quizSet);
+
     const kpIndex = await KnowledgeService.getIndex(userId);
     const selection = await this.selectKnowledgePoints(userId, kpIndex);
     const allKpIds = [
@@ -210,6 +222,7 @@ export const DailyQuizService = {
     quizSet.questions = finalQuestions;
     quizSet.readyCount = finalQuestions.length;
     quizSet.status = quizSet.readyCount >= TARGET_TOTAL ? "ready" : (quizSet.readyCount > 0 ? "partial" : quizSet.status);
+    quizSet.continuingAt = undefined; // 释放节流锁
 
     await kvPut(kvKeys.dailyQuiz(userId, today), quizSet);
 

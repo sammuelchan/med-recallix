@@ -10,21 +10,10 @@ export async function GET(req: NextRequest) {
 
     const data = await DailyQuizService.getTodayQuiz(userId);
 
-    // If partial, trigger continuation in-band to progress toward ready
+    // 异步触发续生，不阻塞响应（避免 30s 超时）。
+    // 节流由 continueGeneration 内部的 continuingAt 锁控制。
     if (data.status === "partial") {
-      try {
-        const updated = await DailyQuizService.continueGeneration(userId);
-        return NextResponse.json({
-          success: true,
-          data: {
-            ...data,
-            status: updated.status,
-            quiz: sanitizeQuiz(updated, data.progress),
-          },
-        });
-      } catch {
-        // Return partial data even if continuation fails
-      }
+      DailyQuizService.continueGeneration(userId).catch(() => {});
     }
 
     return NextResponse.json({
