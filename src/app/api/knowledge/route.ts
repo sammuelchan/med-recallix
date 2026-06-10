@@ -12,17 +12,22 @@ import { AppError } from "@/shared/lib/errors";
 import { getUserId } from "@/shared/lib/get-user-id";
 
 export async function GET(req: NextRequest) {
+  const t0 = performance.now();
   try {
     const userId = await getUserId(req);
+    const tAuth = performance.now();
+
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     // Batch fetch by IDs (for review page)
     const ids = req.nextUrl.searchParams.get("ids");
     if (ids) {
       const { kvBatchGet, kvKeys } = await import("@/shared/infrastructure/kv");
+      const tImport = performance.now();
       const idList = ids.split(",").filter(Boolean);
       const keys = idList.map((id) => kvKeys.knowledgePoint(userId, id));
       const results = await kvBatchGet<import("@/modules/knowledge").KnowledgePoint>(keys);
+      const tKv = performance.now();
       const map: Record<string, { contentMode: string; content: string; qaItems?: unknown[] }> = {};
       for (let i = 0; i < idList.length; i++) {
         const kp = results[i];
@@ -34,13 +39,18 @@ export async function GET(req: NextRequest) {
           };
         }
       }
+      console.log(`[perf] GET /api/knowledge?ids total=${(performance.now()-t0).toFixed(0)}ms auth=${(tAuth-t0).toFixed(0)}ms import=${(tImport-tAuth).toFixed(0)}ms kv=${(tKv-tImport).toFixed(0)}ms`);
       return NextResponse.json({ success: true, data: map });
     }
 
     const category = req.nextUrl.searchParams.get("category") ?? undefined;
     const items = await KnowledgeService.list(userId, category);
+    const tList = performance.now();
+
+    console.log(`[perf] GET /api/knowledge total=${(tList-t0).toFixed(0)}ms auth=${(tAuth-t0).toFixed(0)}ms list=${(tList-tAuth).toFixed(0)}ms`);
     return NextResponse.json({ success: true, data: items });
   } catch (err) {
+    console.log(`[perf] GET /api/knowledge ERROR total=${(performance.now()-t0).toFixed(0)}ms`);
     if (err instanceof AppError) return NextResponse.json(err.toJSON(), { status: err.status });
     return NextResponse.json({ success: false, error: "服务器错误" }, { status: 500 });
   }

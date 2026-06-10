@@ -69,7 +69,9 @@ function createProxyAdapter(ns: "config" | "data"): KVAdapter {
   const base = getKvProxyBaseUrl();
 
   async function call<T>(action: string, body: Record<string, unknown>): Promise<T> {
-    const res = await fetch(`${base}/api/kv/${action}`, {
+    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const url = `${base}/api/kv/${action}`;
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -77,6 +79,10 @@ function createProxyAdapter(ns: "config" | "data"): KVAdapter {
       },
       body: JSON.stringify({ ns, ...body }),
     });
+    const elapsed = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+    if (elapsed > 500) {
+      console.warn(`[kv-proxy] SLOW ${action} ns=${ns} key=${(body as Record<string,unknown>).key ?? "batch"} ${elapsed.toFixed(0)}ms`);
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`KV proxy ${action} failed (${res.status}): ${text}`);
