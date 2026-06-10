@@ -17,6 +17,7 @@ import {
   CreditCard,
   PenLine,
   ListChecks,
+  Home,
 } from "lucide-react";
 import type { ReviewGrade, CardIndexItem } from "@/modules/review";
 import type { KnowledgePoint, QAPair } from "@/modules/knowledge";
@@ -75,6 +76,16 @@ function BlankText({
 
 export default function ReviewPage() {
   const router = useRouter();
+  const homeAction = (
+    <button
+      type="button"
+      onClick={() => router.push("/dashboard")}
+      className="flex items-center justify-center size-8 rounded-lg hover:bg-muted transition-colors"
+      aria-label="返回首页"
+    >
+      <Home className="size-4" />
+    </button>
+  );
   const [cards, setCards] = useState<CardIndexItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
@@ -576,7 +587,7 @@ export default function ReviewPage() {
   if (mode === "card") {
     return (
       <>
-        <Header title={`复习 ${currentIdx + 1}/${cards.length}`} />
+        <Header title={`复习 ${currentIdx + 1}/${cards.length}`} action={homeAction} />
         <PageContainer>
           <div className="space-y-6">
             {modeSelector}
@@ -651,7 +662,7 @@ export default function ReviewPage() {
   if (kpData && kpData.contentMode === "text" && !qaItemsAvailable) {
     return (
       <>
-        <Header title={`复习 ${currentIdx + 1}/${cards.length}`} />
+        <Header title={`复习 ${currentIdx + 1}/${cards.length}`} action={homeAction} />
         <PageContainer>
           <div className="space-y-6">
             {modeSelector}
@@ -709,6 +720,7 @@ export default function ReviewPage() {
         title={`复习 ${currentIdx + 1}/${cards.length}${
           currentQA ? ` · 第${qaIdx + 1}/${currentQAItems!.length}题` : ""
         }`}
+        action={homeAction}
       />
       <PageContainer>
         <div className="space-y-6">
