@@ -28,6 +28,7 @@ export const kvKeys = {
   wrongAnswerIndex: (userId: string) => `wrong_idx_${userId}`,
   wrongAnswer: (userId: string, wrongId: string) => `wrong_${userId}_${wrongId}`,
   dailyQuiz: (userId: string, date: string) => `dq_${userId}_${date}`,
+  dailyQuizAnswerKey: (userId: string, date: string) => `dqa_${userId}_${date}`,
   dailyQuizProgress: (userId: string, date: string) => `dqp_${userId}_${date}`,
   dailyQuizResult: (userId: string, date: string) => `dqr_${userId}_${date}`,
   errorWeight: (userId: string) => `ew_${userId}`,

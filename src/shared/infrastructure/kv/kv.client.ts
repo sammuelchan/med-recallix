@@ -36,6 +36,8 @@ import { getFileKV } from "./kv.local";
  */
 
 const DEFAULT_CACHE_TTL_MS = 10_000;
+const WRITE_THROUGH_TTL_MS = 30_000;
+const MAX_CACHE_ENTRIES = 500;
 
 interface CacheEntry {
   value: string | null;
@@ -44,7 +46,6 @@ interface CacheEntry {
 
 const readCache = new Map<string, CacheEntry>();
 
-/** Returns the cached raw JSON string, null (cached negative), or undefined (miss). */
 function cacheGet(key: string): string | null | undefined {
   const entry = readCache.get(key);
   if (!entry) return undefined;
@@ -57,7 +58,7 @@ function cacheGet(key: string): string | null | undefined {
 
 function cacheSet(key: string, value: string | null, ttl = DEFAULT_CACHE_TTL_MS): void {
   readCache.set(key, { value, expiry: Date.now() + ttl });
-  if (readCache.size > 500) {
+  if (readCache.size > MAX_CACHE_ENTRIES) {
     const now = Date.now();
     for (const [k, e] of readCache) {
       if (now > e.expiry) readCache.delete(k);
@@ -204,10 +205,17 @@ function getAdapter(ns: "config" | "data"): KVAdapter {
   return adapter;
 }
 
-/** Read a JSON value from KV. Returns null if the key does not exist. */
+/**
+ * Read a JSON value from KV. Returns null if the key does not exist.
+ *
+ * @param cacheTtl — Override the default cache TTL (ms). Use for hot-path
+ *   reads where the data is unlikely to change from an external source
+ *   (e.g. quiz answer keys during an active session).
+ */
 export async function kvGet<T>(
   key: string,
   ns: "config" | "data" = "data",
+  cacheTtl?: number,
 ): Promise<T | null> {
   const cacheKey = `${ns}:${key}`;
   const cached = cacheGet(cacheKey);
@@ -217,7 +225,7 @@ export async function kvGet<T>(
   }
 
   const raw = await getAdapter(ns).get(key);
-  cacheSet(cacheKey, raw);
+  cacheSet(cacheKey, raw, cacheTtl ?? DEFAULT_CACHE_TTL_MS);
   if (raw === null) return null;
   try {
     return JSON.parse(raw) as T;
@@ -264,7 +272,11 @@ export async function kvBatchGet<T>(
   return results;
 }
 
-/** Write a JSON value to KV (upsert). */
+/**
+ * Write a JSON value to KV (upsert).
+ * After persisting, the value is cached with a longer TTL (30s) since
+ * the caller just wrote it — it's guaranteed fresh.
+ */
 export async function kvPut<T>(
   key: string,
   value: T,
@@ -272,7 +284,7 @@ export async function kvPut<T>(
 ): Promise<void> {
   const json = JSON.stringify(value);
   await getAdapter(ns).put(key, json);
-  cacheSet(`${ns}:${key}`, json);
+  cacheSet(`${ns}:${key}`, json, WRITE_THROUGH_TTL_MS);
 }
 
 /** Delete a key from KV (no-op if key does not exist). */

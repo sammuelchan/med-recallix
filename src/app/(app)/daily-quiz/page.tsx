@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Clock, RefreshCw, Flag } from "lucide-react";
+import { ArrowLeft, Clock, RefreshCw, Flag, AlertTriangle } from "lucide-react";
 import { Header, PageContainer } from "@/shared/components/layout";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
@@ -27,6 +27,9 @@ interface QuizState {
   displayIndex: number;
 }
 
+const EXAM_TIME_LIMIT = 75 * 60; // 75 minutes in seconds
+const OVERTIME_WARNING_INTERVAL = 10 * 60; // every 10 min after overtime
+
 export default function DailyQuizPage() {
   const router = useRouter();
   const [state, setState] = useState<QuizState>({
@@ -40,6 +43,7 @@ export default function DailyQuizPage() {
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     isCorrect: boolean;
@@ -51,13 +55,15 @@ export default function DailyQuizPage() {
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [overtimeNotified, setOvertimeNotified] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // 题目锁: 一旦展示某题，锁定其引用直到用户点击"下一题"
-  // 防止轮询追加题目或 state 更新导致当前展示的题目发生变化
   const lockedQuestionRef = useRef<DailyQuizQuestion | null>(null);
-  // 答题中标志: 为 true 时暂停轮询，避免并发 state 更新
   const isAnsweringRef = useRef(false);
+  const lastOvertimeAlert = useRef(0);
+
+  const remainingTime = EXAM_TIME_LIMIT - elapsed;
+  const isOvertime = remainingTime <= 0;
 
   const fetchQuiz = useCallback(async () => {
     try {
@@ -155,26 +161,64 @@ export default function DailyQuizPage() {
     };
   }, [state.status]);
 
-  // ─── 题目锁定机制 ─────────────────────────────────────────
-  // 每次 displayIndex 变化后首次遇到有效 question 时锁定。
-  // 锁定后即使 questions 数组被轮询更新，当前展示的题目也不变。
+  // When status transitions to in_progress but readyCount < total,
+  // we still need to poll for continuation completion
+  useEffect(() => {
+    if (state.status !== "in_progress" || state.readyCount >= state.total) return;
+    let cancelled = false;
+    const poll = setInterval(async () => {
+      if (cancelled || isAnsweringRef.current) return;
+      try {
+        const res = await fetch("/api/daily-quiz");
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success && json.data.quiz) {
+          const quiz = json.data.quiz;
+          setState((prev) => {
+            const merged = [...prev.questions];
+            for (let i = prev.questions.length; i < quiz.questions.length; i++) {
+              merged.push(quiz.questions[i]);
+            }
+            const newReadyCount = Math.max(prev.readyCount, quiz.readyCount);
+            return {
+              ...prev,
+              questions: merged,
+              readyCount: newReadyCount,
+            };
+          });
+          if (quiz.readyCount >= quiz.totalCount) {
+            clearInterval(poll);
+          }
+        }
+      } catch {}
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, [state.status, state.readyCount, state.total]);
+
   const rawQuestion = state.questions[state.displayIndex];
   if (rawQuestion && !lockedQuestionRef.current) {
     lockedQuestionRef.current = rawQuestion;
   }
   const currentQuestion = lockedQuestionRef.current ?? rawQuestion;
 
-  const handleSelect = async (answer: string) => {
-    if (submitting || feedback || !currentQuestion) return;
-    isAnsweringRef.current = true;
+  const handleSelect = (answer: string) => {
+    if (feedback || submitting) return;
     setSelectedAnswer(answer);
+  };
+
+  const handleConfirmSubmit = async () => {
+    if (!selectedAnswer || !currentQuestion || submitting || feedback) return;
+    isAnsweringRef.current = true;
     setSubmitting(true);
 
     try {
       const res = await fetch("/api/daily-quiz/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId: currentQuestion.id, answer }),
+        body: JSON.stringify({ questionId: currentQuestion.id, answer: selectedAnswer }),
       });
       const json = await res.json();
       if (json.success) {
@@ -200,13 +244,17 @@ export default function DailyQuizPage() {
     }
   };
 
+  const isAllDone = useCallback((nextIdx: number) => {
+    const allGenerated = state.readyCount >= state.total;
+    const isLastReady = nextIdx >= state.readyCount;
+    return nextIdx >= state.total || (isLastReady && allGenerated);
+  }, [state.readyCount, state.total]);
+
   const handleNext = async () => {
     const nextDisplayIndex = state.displayIndex + 1;
-    const isLastReady = nextDisplayIndex >= state.readyCount;
-    const noMoreComing = state.status === "ready" || state.status === "in_progress";
-    const allDone = nextDisplayIndex >= state.total || (isLastReady && noMoreComing);
 
-    if (allDone) {
+    if (isAllDone(nextDisplayIndex)) {
+      setCompleting(true);
       try {
         const completeRes = await fetch("/api/daily-quiz/complete", { method: "POST" });
         const completeJson = await completeRes.json();
@@ -225,18 +273,10 @@ export default function DailyQuizPage() {
     setShowFeedback(false);
     setFeedbackSent(false);
 
-    if (isLastReady) {
-      setState((prev) => ({
-        ...prev,
-        displayIndex: nextDisplayIndex,
-        status: "partial",
-      }));
-    } else {
-      setState((prev) => ({
-        ...prev,
-        displayIndex: nextDisplayIndex,
-      }));
-    }
+    setState((prev) => ({
+      ...prev,
+      displayIndex: nextDisplayIndex,
+    }));
   };
 
   const handleRegenerate = async () => {
@@ -251,6 +291,8 @@ export default function DailyQuizPage() {
         setSelectedAnswer(null);
         setFeedback(null);
         setElapsed(0);
+        setOvertimeNotified(false);
+        lastOvertimeAlert.current = 0;
         const quiz = json.data.quiz;
         setState({
           status: quiz.status,
@@ -287,11 +329,27 @@ export default function DailyQuizPage() {
     } catch {}
   };
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  const formatCountdown = (seconds: number) => {
+    const abs = Math.abs(seconds);
+    const m = Math.floor(abs / 60);
+    const s = abs % 60;
+    const formatted = `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    return seconds < 0 ? `-${formatted}` : formatted;
   };
+
+  // Overtime notification
+  useEffect(() => {
+    if (!isOvertime) return;
+    if (!overtimeNotified) {
+      setOvertimeNotified(true);
+      lastOvertimeAlert.current = elapsed;
+      return;
+    }
+    const sinceLast = elapsed - lastOvertimeAlert.current;
+    if (sinceLast >= OVERTIME_WARNING_INTERVAL) {
+      lastOvertimeAlert.current = elapsed;
+    }
+  }, [elapsed, isOvertime, overtimeNotified]);
 
   if (loading) {
     return (
@@ -334,6 +392,7 @@ export default function DailyQuizPage() {
     );
   }
 
+  // Waiting for more questions to be generated
   if (!currentQuestion && state.displayIndex < state.total && state.readyCount > 0) {
     return (
       <>
@@ -342,10 +401,10 @@ export default function DailyQuizPage() {
           <div className="flex flex-col items-center justify-center gap-4 py-20">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
             <p className="text-sm text-gray-700 font-medium">
-              已完成 {state.readyCount} 题，正在准备更多题目...
+              已完成 {state.displayIndex} 题，正在准备更多题目...
             </p>
             <p className="text-xs text-gray-400">
-              已答 {state.displayIndex}/{state.total} 题
+              已生成 {state.readyCount}/{state.total} 题，请稍候
             </p>
           </div>
         </PageContainer>
@@ -374,8 +433,7 @@ export default function DailyQuizPage() {
 
   const displayIndex = Math.min(state.displayIndex, Math.max(state.readyCount, 1) - 1);
   const nextIdx = state.displayIndex + 1;
-  const isLastQuestion = nextIdx >= state.total ||
-    (nextIdx >= state.readyCount && (state.status === "ready" || state.status === "in_progress"));
+  const isLastQuestion = isAllDone(nextIdx);
 
   return (
     <>
@@ -395,12 +453,29 @@ export default function DailyQuizPage() {
           >
             <RefreshCw className={cn("h-3.5 w-3.5", regenerating && "animate-spin")} />
           </button>
-          <span className="flex items-center gap-1 text-sm text-gray-500">
+          <span
+            className={cn(
+              "flex items-center gap-1 text-sm tabular-nums",
+              isOvertime
+                ? "font-medium text-red-500"
+                : remainingTime <= 5 * 60
+                  ? "font-medium text-orange-500"
+                  : "text-gray-500",
+            )}
+          >
             <Clock className="h-4 w-4" />
-            {formatTime(elapsed)}
+            {formatCountdown(remainingTime)}
           </span>
         </div>
       </header>
+
+      {/* Overtime banner */}
+      {isOvertime && overtimeNotified && !feedback && (
+        <div className="sticky top-14 z-30 flex items-center gap-2 bg-red-50 px-4 py-2 text-xs text-red-600 border-b border-red-100">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>考试时间已到，你仍可继续作答，但超时部分不计入模拟成绩</span>
+        </div>
+      )}
 
       {showRegenerateConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -454,7 +529,7 @@ export default function DailyQuizPage() {
                   className={cn(
                     "flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-all active:scale-[0.98]",
                     !feedback && !isSelected && "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 active:bg-blue-50/80",
-                    !feedback && isSelected && "border-blue-400 bg-blue-50",
+                    !feedback && isSelected && "border-blue-400 bg-blue-50 ring-2 ring-blue-200",
                     isCorrect && "border-green-400 bg-green-50",
                     isWrong && "border-red-400 bg-red-50",
                     feedback && !isCorrect && !isWrong && "border-gray-100 opacity-60",
@@ -463,7 +538,8 @@ export default function DailyQuizPage() {
                   <span
                     className={cn(
                       "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium",
-                      !feedback && "bg-gray-100 text-gray-600",
+                      !feedback && !isSelected && "bg-gray-100 text-gray-600",
+                      !feedback && isSelected && "bg-blue-500 text-white",
                       isCorrect && "bg-green-500 text-white",
                       isWrong && "bg-red-500 text-white",
                     )}
@@ -475,6 +551,29 @@ export default function DailyQuizPage() {
               );
             })}
           </div>
+
+          {/* Confirm submit button - shown when answer selected but not yet submitted */}
+          {selectedAnswer && !feedback && (
+            <button
+              onClick={handleConfirmSubmit}
+              disabled={submitting}
+              className={cn(
+                "w-full rounded-xl py-3 text-sm font-medium text-white transition-colors",
+                submitting
+                  ? "bg-blue-300 cursor-not-allowed"
+                  : "bg-blue-500 hover:bg-blue-600 active:bg-blue-700",
+              )}
+            >
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  提交中...
+                </span>
+              ) : (
+                "确认提交"
+              )}
+            </button>
+          )}
 
           {feedback && (
             <div
@@ -521,9 +620,24 @@ export default function DailyQuizPage() {
           {feedback && (
             <button
               onClick={handleNext}
-              className="w-full rounded-xl bg-blue-500 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-600"
+              disabled={completing}
+              className={cn(
+                "w-full rounded-xl py-3 text-sm font-medium text-white transition-colors",
+                completing
+                  ? "bg-blue-300 cursor-not-allowed"
+                  : "bg-blue-500 hover:bg-blue-600",
+              )}
             >
-              {isLastQuestion ? "查看报告" : "下一题"}
+              {completing ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  正在生成报告...
+                </span>
+              ) : isLastQuestion ? (
+                "查看报告"
+              ) : (
+                "下一题"
+              )}
             </button>
           )}
         </div>

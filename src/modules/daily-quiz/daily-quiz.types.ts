@@ -36,6 +36,23 @@ export interface DailyQuizSet {
   continuingAt?: string;
 }
 
+/**
+ * Lightweight answer key stored separately from the full quiz set.
+ * Used by submitAnswer to avoid loading the entire 50-question quiz.
+ */
+export interface DailyQuizAnswerKey {
+  userId: string;
+  date: string;
+  /** questionId → { answer, explanation, sourceKpId, stem (first 30 chars for audit) } */
+  keys: Record<string, {
+    answer: string;
+    explanation: string;
+    sourceKpId: string;
+    sourceType: QuestionSourceType;
+    generatedBy?: QuestionGeneratedBy;
+  }>;
+}
+
 export interface DailyQuizProgress {
   userId: string;
   date: string;

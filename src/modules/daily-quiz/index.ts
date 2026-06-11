@@ -4,6 +4,7 @@ export { SubmitAnswerSchema } from "./daily-quiz.schema";
 export type { SubmitAnswerInput } from "./daily-quiz.schema";
 export type {
   DailyQuizSet,
+  DailyQuizAnswerKey,
   DailyQuizQuestion,
   DailyQuizProgress,
   DailyQuizResult,
