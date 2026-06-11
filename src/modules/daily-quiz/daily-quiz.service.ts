@@ -101,8 +101,12 @@ export const DailyQuizService = {
 
     DailyQuizAuditService.append(userId, "generate_start", `开始生成，知识点 ${kpIndex.length} 个，选取 ${allKpIds.length} 个（错题 ${selection.errorReview.length} / 薄弱 ${selection.weakArea.length} / 新覆盖 ${selection.newCoverage.length}），首批目标 ${FIRST_BATCH} 题`).catch(() => {});
 
+    // Load recent cached stems for cross-day dedup (last 100 to keep prompt manageable)
+    const cache = await kvGet<QuizCachePool>(kvKeys.quizCache(userId));
+    const recentStems = cache?.questions.slice(0, 100).map((q) => q.stem) ?? [];
+
     const startTime = Date.now();
-    const questions = await this.generateBatch(userId, allKpIds, selection, FIRST_BATCH);
+    const questions = await this.generateBatch(userId, allKpIds, selection, FIRST_BATCH, recentStems);
     const durationMs = Date.now() - startTime;
 
     DailyQuizAuditService.append(userId, "generate_batch_ok", `首批生成完成，得到 ${questions.length} 题`, { questionCount: questions.length, durationMs }).catch(() => {});
@@ -192,31 +196,41 @@ export const DailyQuizService = {
     // ─── COW: 复制当前题目数组，在副本上操作 ───────────────────
     const snapshot = [...quizSet.questions];
 
-    try {
-      const batchSize = Math.min(remaining, 20);
-      const startTime = Date.now();
-      const newQuestions = await this.generateBatch(
-        userId,
-        allKpIds,
-        selection,
-        batchSize,
-      );
-      const durationMs = Date.now() - startTime;
+    // Retry up to 2 rounds: dedup may shrink the batch, so compensate with extra AI calls
+    const MAX_ROUNDS = 2;
+    for (let round = 0; round < MAX_ROUNDS && snapshot.length < TARGET_TOTAL; round++) {
+      const currentRemaining = TARGET_TOTAL - snapshot.length;
+      const existingStems = snapshot.map((q) => q.stem);
 
-      // 追加到副本而非原数组
-      snapshot.push(...newQuestions);
+      try {
+        const batchSize = Math.min(currentRemaining, 20);
+        const startTime = Date.now();
+        const newQuestions = await this.generateBatch(
+          userId,
+          allKpIds,
+          selection,
+          batchSize,
+          existingStems,
+        );
+        const durationMs = Date.now() - startTime;
 
-      DailyQuizAuditService.append(userId, "continue_ok", `续批生成 ${newQuestions.length} 题，累计 ${snapshot.length}/${TARGET_TOTAL}`, { questionCount: newQuestions.length, durationMs }).catch(() => {});
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      DailyQuizAuditService.append(userId, "continue_fail", `续批生成失败，尝试缓存降级`, { error: errorMsg }).catch(() => {});
+        snapshot.push(...newQuestions);
 
-      const fallback = await this.getFallbackQuestions(userId, remaining);
-      if (fallback.length > 0) {
-        snapshot.push(...fallback);
-        DailyQuizAuditService.append(userId, "generate_fallback", `缓存降级成功，补充 ${fallback.length} 题`, { questionCount: fallback.length }).catch(() => {});
-      } else {
-        DailyQuizAuditService.append(userId, "generate_fallback", `缓存降级失败，缓存池为空`).catch(() => {});
+        DailyQuizAuditService.append(userId, "continue_ok", `续批第${round + 1}轮生成 ${newQuestions.length} 题，累计 ${snapshot.length}/${TARGET_TOTAL}`, { questionCount: newQuestions.length, durationMs }).catch(() => {});
+
+        if (newQuestions.length === 0) break;
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        DailyQuizAuditService.append(userId, "continue_fail", `续批生成失败，尝试缓存降级`, { error: errorMsg }).catch(() => {});
+
+        const fallback = await this.getFallbackQuestions(userId, currentRemaining, existingStems);
+        if (fallback.length > 0) {
+          snapshot.push(...fallback);
+          DailyQuizAuditService.append(userId, "generate_fallback", `缓存降级成功，补充 ${fallback.length} 题`, { questionCount: fallback.length }).catch(() => {});
+        } else {
+          DailyQuizAuditService.append(userId, "generate_fallback", `缓存降级失败，缓存池为空`).catch(() => {});
+        }
+        break;
       }
     }
 
@@ -585,6 +599,7 @@ export const DailyQuizService = {
     kpIds: string[],
     selection: { errorReview: string[]; weakArea: string[]; newCoverage: string[] },
     batchSize: number,
+    existingStems?: string[],
   ): Promise<DailyQuizQuestion[]> {
     const kpKeys = [...new Set(kpIds)].map((id) =>
       kvKeys.knowledgePoint(userId, id),
@@ -594,7 +609,7 @@ export const DailyQuizService = {
 
     if (validKps.length === 0) {
       DailyQuizAuditService.append(userId, "generate_batch_fail", `知识点内容全部加载失败，${kpIds.length} 个 KP 均为空`).catch(() => {});
-      return this.getFallbackQuestions(userId, batchSize);
+      return this.getFallbackQuestions(userId, batchSize, existingStems);
     }
 
     const errorSet = new Set(selection.errorReview);
@@ -609,7 +624,7 @@ export const DailyQuizService = {
     const config = await getAIConfig();
     if (!config.apiKey || config.apiKey.length < 10) {
       DailyQuizAuditService.append(userId, "ai_key_missing", `AI API Key 未配置，无法生成`).catch(() => {});
-      return this.getFallbackQuestions(userId, batchSize);
+      return this.getFallbackQuestions(userId, batchSize, existingStems);
     }
 
     const client = createAIClient(config);
@@ -690,10 +705,15 @@ export const DailyQuizService = {
       if (aiNeeded > 0) {
         promises.push(
           (async () => {
+            const allExistingStems = [
+              ...(existingStems ?? []),
+              ...rawQAs.map((item) => item.qa.question),
+            ];
             const prompt = buildDailyQuizPrompt(
               validKps.map((kp) => ({ title: kp.title, content: kp.content })),
               aiNeeded,
               feedbackContext,
+              allExistingStems.length > 0 ? allExistingStems : undefined,
             );
             const { text } = await generateText({
               model: client(config.model),
@@ -750,22 +770,84 @@ export const DailyQuizService = {
 
       if (qaQuestions.length === 0 && aiQuestions.length === 0) {
         DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 生成 0 题通过校验`, { durationMs }).catch(() => {});
-        return this.getFallbackQuestions(userId, batchSize);
+        return this.getFallbackQuestions(userId, batchSize, existingStems);
       }
 
       DailyQuizAuditService.append(userId, "generate_batch_ok", `生成完成：QA ${qaQuestions.length} 题 + AI ${aiQuestions.length} 题`, { questionCount: qaQuestions.length + aiQuestions.length, durationMs }).catch(() => {});
 
-      // Shuffle all questions together
+      // Deduplicate: filter out questions whose stems are too similar to existing or each other
       const combined = [...qaQuestions, ...aiQuestions];
-      for (let i = combined.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [combined[i], combined[j]] = [combined[j], combined[i]];
+      const allExistingForDedup = existingStems ?? [];
+      const deduplicated = this.deduplicateByStems(combined, allExistingForDedup);
+
+      const removedCount = combined.length - deduplicated.length;
+      if (removedCount > 0) {
+        DailyQuizAuditService.append(userId, "generate_batch_ok", `去重过滤掉 ${removedCount} 道重复题`).catch(() => {});
       }
-      return combined;
+
+      // Supplementary generation: if dedup removed ≥3 questions, try one more AI call to fill the gap
+      if (removedCount >= 3 && deduplicated.length < batchSize) {
+        try {
+          const deficit = batchSize - deduplicated.length;
+          const supplementStems = [...allExistingForDedup, ...deduplicated.map((q) => q.stem)];
+          const supplementPrompt = buildDailyQuizPrompt(
+            validKps.map((kp) => ({ title: kp.title, content: kp.content })),
+            deficit,
+            feedbackContext,
+            supplementStems,
+          );
+          const { text: supText } = await generateText({
+            model: client(config.model),
+            prompt: supplementPrompt,
+            temperature: 0.8,
+          });
+          const supMatch = supText.match(/\[[\s\S]*\]/);
+          if (supMatch) {
+            const supRaw = JSON.parse(supMatch[0]) as Array<{
+              stem: string; options: Array<{ label: string; text: string }>; answer: string; explanation: string;
+            }>;
+            const validLabels = new Set(["A", "B", "C", "D", "E"]);
+            const supQuestions: DailyQuizQuestion[] = [];
+            for (let i = 0; i < supRaw.length; i++) {
+              const q = supRaw[i];
+              if (!q.stem || !q.options || !q.answer || !q.explanation) continue;
+              if (!validLabels.has(q.answer) || q.options.length < 4) continue;
+              const optionLabels = new Set(q.options.map((o) => o.label));
+              if (!optionLabels.has(q.answer)) continue;
+              if (q.stem.trim().length < 10) continue;
+              const kp = validKps[i % validKps.length];
+              supQuestions.push({
+                id: generateId(),
+                stem: q.stem,
+                options: q.options,
+                answer: q.answer,
+                explanation: q.explanation,
+                sourceKpId: kp?.id ?? "",
+                sourceType: "new_coverage",
+                generatedBy: "ai",
+              });
+            }
+            const supDeduped = this.deduplicateByStems(supQuestions, supplementStems);
+            deduplicated.push(...supDeduped);
+            if (supDeduped.length > 0) {
+              DailyQuizAuditService.append(userId, "generate_batch_ok", `补生 ${supDeduped.length} 题填补去重缺口`).catch(() => {});
+            }
+          }
+        } catch {
+          // supplementary generation failed, proceed with what we have
+        }
+      }
+
+      // Shuffle all questions together
+      for (let i = deduplicated.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deduplicated[i], deduplicated[j]] = [deduplicated[j], deduplicated[i]];
+      }
+      return deduplicated;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       DailyQuizAuditService.append(userId, "generate_batch_fail", `AI 调用异常`, { error: errorMsg }).catch(() => {});
-      return this.getFallbackQuestions(userId, batchSize);
+      return this.getFallbackQuestions(userId, batchSize, existingStems);
     }
   },
 
@@ -806,14 +888,87 @@ export const DailyQuizService = {
     return allQAs.slice(0, maxCount);
   },
 
+  /**
+   * Normalize stem text for similarity comparison:
+   * strip punctuation/whitespace, lowercase, collapse runs.
+   */
+  normalizeStem(stem: string): string {
+    return stem
+      .replace(/[，。、；：""''（）【】《》！？\s\.\,\;\:\!\?\-\—\…\"\'\(\)\[\]]/g, "")
+      .toLowerCase();
+  },
+
+  /**
+   * Compute Jaccard similarity between two sets of characters.
+   * Returns 0–1 (1 = identical).
+   */
+  stemSimilarity(a: string, b: string): number {
+    const na = this.normalizeStem(a);
+    const nb = this.normalizeStem(b);
+    if (na === nb) return 1;
+    if (na.length === 0 || nb.length === 0) return 0;
+
+    const setA = new Set(na.split(""));
+    const setB = new Set(nb.split(""));
+    let intersection = 0;
+    for (const ch of setA) {
+      if (setB.has(ch)) intersection++;
+    }
+    const union = setA.size + setB.size - intersection;
+    return union === 0 ? 0 : intersection / union;
+  },
+
+  /**
+   * Filter out new questions whose stems are duplicates of existing stems
+   * or of each other. Uses both exact normalized match and Jaccard similarity.
+   */
+  deduplicateByStems(
+    newQuestions: DailyQuizQuestion[],
+    existingStems: string[],
+  ): DailyQuizQuestion[] {
+    const SIMILARITY_THRESHOLD = 0.7;
+    const seenNormalized = new Set(existingStems.map((s) => this.normalizeStem(s)));
+    const seenRaw = [...existingStems];
+    const result: DailyQuizQuestion[] = [];
+
+    for (const q of newQuestions) {
+      const norm = this.normalizeStem(q.stem);
+
+      if (seenNormalized.has(norm)) continue;
+
+      let isDuplicate = false;
+      for (const existing of seenRaw) {
+        if (this.stemSimilarity(q.stem, existing) >= SIMILARITY_THRESHOLD) {
+          isDuplicate = true;
+          break;
+        }
+      }
+      if (isDuplicate) continue;
+
+      seenNormalized.add(norm);
+      seenRaw.push(q.stem);
+      result.push(q);
+    }
+
+    return result;
+  },
+
   async getFallbackQuestions(
     userId: string,
     count: number,
+    excludeStems?: string[],
   ): Promise<DailyQuizQuestion[]> {
     const cache = await kvGet<QuizCachePool>(kvKeys.quizCache(userId));
     if (!cache || cache.questions.length === 0) return [];
 
-    const shuffled = [...cache.questions].sort(() => Math.random() - 0.5);
+    let candidates = [...cache.questions];
+
+    if (excludeStems && excludeStems.length > 0) {
+      const excludeSet = new Set(excludeStems.map((s) => this.normalizeStem(s)));
+      candidates = candidates.filter((q) => !excludeSet.has(this.normalizeStem(q.stem)));
+    }
+
+    const shuffled = candidates.sort(() => Math.random() - 0.5);
     return shuffled.slice(0, count).map((q) => ({
       id: generateId(),
       stem: q.stem,

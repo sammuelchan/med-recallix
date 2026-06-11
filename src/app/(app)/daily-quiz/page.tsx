@@ -93,6 +93,7 @@ export default function DailyQuizPage() {
   const [elapsed, setElapsed] = useState(0);
   const [regenerating, setRegenerating] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [overtimeNotified, setOvertimeNotified] = useState(false);
@@ -251,6 +252,14 @@ export default function DailyQuizPage() {
     lockedQuestionRef.current = rawQuestion;
   }
   const currentQuestion = lockedQuestionRef.current ?? rawQuestion;
+
+  const handleBack = useCallback(() => {
+    if (state.currentIndex > 0 && state.currentIndex < state.total) {
+      setShowLeaveConfirm(true);
+    } else {
+      router.push("/dashboard");
+    }
+  }, [state.currentIndex, state.total, router]);
 
   /** 选择选项 — 只设置选中状态，不触发提交（模拟考试允许反复修改） */
   const handleSelect = (answer: string) => {
@@ -496,7 +505,7 @@ export default function DailyQuizPage() {
   return (
     <>
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur">
-        <button onClick={() => router.back()} className="flex items-center text-gray-600">
+        <button onClick={handleBack} className="flex items-center text-gray-600">
           <ArrowLeft className="h-5 w-5" />
         </button>
         <span className="text-sm font-medium text-gray-700">
@@ -556,6 +565,31 @@ export default function DailyQuizPage() {
                 className="flex-1 rounded-xl bg-blue-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-600"
               >
                 确认换题
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-xl space-y-4">
+            <h3 className="text-lg font-semibold text-center">确定要退出答题吗？</h3>
+            <p className="text-sm text-muted-foreground text-center">
+              还有 {state.total - state.currentIndex} 题未完成，已答进度已自动保存，下次可继续作答。
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                继续答题
+              </button>
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="flex-1 rounded-xl bg-blue-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-600"
+              >
+                退出
               </button>
             </div>
           </div>

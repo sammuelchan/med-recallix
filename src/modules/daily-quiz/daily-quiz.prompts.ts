@@ -2,6 +2,7 @@ export function buildDailyQuizPrompt(
   knowledgePoints: { title: string; content: string }[],
   count: number,
   feedbackContext?: string,
+  existingStems?: string[],
 ): string {
   const kpText = knowledgePoints
     .map((kp, i) => `【知识点 ${i + 1}】${kp.title}\n${kp.content}`)
@@ -11,12 +12,16 @@ export function buildDailyQuizPrompt(
     ? `\n**用户历史反馈（请避免以下问题）：**\n${feedbackContext}\n`
     : "";
 
+  const dedupSection = existingStems && existingStems.length > 0
+    ? `\n**以下题目已经出过，严禁出相同或高度相似的题目（包括换汤不换药的变体）：**\n${existingStems.map((s, i) => `${i + 1}. ${s.length > 80 ? s.slice(0, 80) + "…" : s}`).join("\n")}\n`
+    : "";
+
   return `你是一位资深临床执业医师考试命题专家，熟悉近5年（2021-2026）国家临床执业医师资格考试和临床执业助理医师资格考试的命题规律和高频考点。
 
 请严格基于以下知识点内容，出 ${count} 道 A1/A2 型单选题。
 
 ${kpText}
-${feedbackSection}
+${feedbackSection}${dedupSection}
 **出题方向（必须遵循近5年临床医考命题趋势）：**
 - 优先考查**临床思维和实际应用能力**，而非单纯记忆
 - 重点覆盖近5年高频考点方向：疾病的首选治疗/检查、典型临床表现、鉴别诊断要点、急危重症处理原则
