@@ -1,0 +1,6 @@
+# pnpm v10+ 安全策略：显式允许含 postinstall 脚本的依赖
+# 不设置此项会导致 ERR_PNPM_IGNORED_BUILDS（exit code 1），CI 构建失败
+allowBuilds:
+  msw: true
+  sharp: true
+  unrs-resolver: true
