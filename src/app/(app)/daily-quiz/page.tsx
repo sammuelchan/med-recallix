@@ -9,13 +9,50 @@ import { cn } from "@/shared/lib/utils";
 import type { DailyQuizQuestion, DailyQuizStatus } from "@/modules/daily-quiz";
 
 /**
- * 答题状态设计:
- * - displayIndex: 当前展示给用户的题目索引（仅用户点"下一题"才递增）
+ * ═══════════════════════════════════════════════════════════════
+ * 每日练习 — 模拟线上临床执业医师考试答题页
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * 【用户旅程】
+ *
+ * 1. 进入页面
+ *    → 加载骨架屏
+ *    → GET /api/daily-quiz 获取今日 quiz
+ *    → 如果已有 result → 跳转报告页
+ *    → 如果无 quiz → POST /api/daily-quiz 触发生成首批 20 题
+ *    → 后台异步 COW 补全剩余 30 题（总目标 50 题）
+ *
+ * 2. 答题中
+ *    → 顶部: 返回 | 1/50 题号 | 换题按钮 | 倒计时 (75:00 → 00:00)
+ *    → 题干 + ABCDE 五选项
+ *    → 选择某选项 → 蓝色高亮，可换选（不触发提交）
+ *    → 点击「确认提交」→ POST /api/daily-quiz/submit → 核对答案
+ *    → 显示对/错反馈 + 解析 + 报告问题入口
+ *    → 点击「下一题」→ 清除状态，进入下一题
+ *
+ * 3. 等待题目
+ *    → 如果用户答题速度快于后台生成，显示等待画面
+ *    → 后台每 3 秒轮询新题目，直到 50 题就绪
+ *
+ * 4. 倒计时
+ *    → 75 分钟倒计时；≤5 分钟橙色；超时红色 + 顶部横幅
+ *    → 超时不强制中断，仍可继续答题
+ *    → 恢复答题时从 progress.startedAt 计算已用时间
+ *
+ * 5. 完成答题
+ *    → 最后一题「查看报告」→ POST /api/daily-quiz/complete
+ *    → 跳转报告页，展示正确率、用时、薄弱科目等
+ *    → complete 失败时显示错误提示 + 重试按钮
+ *
+ * 【状态设计】
+ *
+ * - displayIndex: 当前展示给用户的题目索引（仅点"下一题"才递增）
  * - currentIndex: 服务端 progress 的已答题数（提交答案后立即更新）
  * - readyCount: 后端已生成的题目数（随 COW 异步补全递增）
  * - total: 总目标题数（50）
  *
  * 分离 displayIndex 和 currentIndex 是防止跳题的核心设计。
+ * lockedQuestionRef 确保当前展示的题目不会被轮询更新替换。
  */
 interface QuizState {
   status: DailyQuizStatus | null;
@@ -27,8 +64,10 @@ interface QuizState {
   displayIndex: number;
 }
 
-const EXAM_TIME_LIMIT = 75 * 60; // 75 minutes in seconds
-const OVERTIME_WARNING_INTERVAL = 10 * 60; // every 10 min after overtime
+/** 模拟考试限时 75 分钟（与临床执业医师考试 A1/A2 单元一致） */
+const EXAM_TIME_LIMIT = 75 * 60;
+/** 超时后每 10 分钟更新一次提醒标记 */
+const OVERTIME_WARNING_INTERVAL = 10 * 60;
 
 export default function DailyQuizPage() {
   const router = useRouter();
@@ -44,6 +83,7 @@ export default function DailyQuizPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     isCorrect: boolean;
@@ -58,7 +98,9 @@ export default function DailyQuizPage() {
   const [overtimeNotified, setOvertimeNotified] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** 题目锁: 锁定当前展示的题目，防止轮询更新替换题干 */
   const lockedQuestionRef = useRef<DailyQuizQuestion | null>(null);
+  /** 答题中标志: 为 true 时暂停轮询，避免并发 state 更新 */
   const isAnsweringRef = useRef(false);
   const lastOvertimeAlert = useRef(0);
 
@@ -92,6 +134,13 @@ export default function DailyQuizPage() {
         }
       } else if (quiz) {
         const resumeIndex = progress?.currentIndex ?? 0;
+        // 恢复答题时，从 startedAt 计算已用时间，保持倒计时准确
+        if (progress?.startedAt) {
+          const resumedElapsed = Math.floor(
+            (Date.now() - new Date(progress.startedAt).getTime()) / 1000,
+          );
+          setElapsed(Math.max(0, resumedElapsed));
+        }
         setState((prev) => ({
           ...prev,
           status,
@@ -161,8 +210,7 @@ export default function DailyQuizPage() {
     };
   }, [state.status]);
 
-  // When status transitions to in_progress but readyCount < total,
-  // we still need to poll for continuation completion
+  // 当 status 变为 in_progress 但题目尚未全部生成时，继续轮询等待后台补全
   useEffect(() => {
     if (state.status !== "in_progress" || state.readyCount >= state.total) return;
     let cancelled = false;
@@ -204,11 +252,13 @@ export default function DailyQuizPage() {
   }
   const currentQuestion = lockedQuestionRef.current ?? rawQuestion;
 
+  /** 选择选项 — 只设置选中状态，不触发提交（模拟考试允许反复修改） */
   const handleSelect = (answer: string) => {
     if (feedback || submitting) return;
     setSelectedAnswer(answer);
   };
 
+  /** 确认提交 — 用户确定答案后发送到服务端核对 */
   const handleConfirmSubmit = async () => {
     if (!selectedAnswer || !currentQuestion || submitting || feedback) return;
     isAnsweringRef.current = true;
@@ -244,6 +294,7 @@ export default function DailyQuizPage() {
     }
   };
 
+  /** 判断是否所有题目已做完（需所有题生成完毕 + 当前是最后一题） */
   const isAllDone = useCallback((nextIdx: number) => {
     const allGenerated = state.readyCount >= state.total;
     const isLastReady = nextIdx >= state.readyCount;
@@ -255,14 +306,21 @@ export default function DailyQuizPage() {
 
     if (isAllDone(nextDisplayIndex)) {
       setCompleting(true);
+      setCompleteError(false);
       try {
         const completeRes = await fetch("/api/daily-quiz/complete", { method: "POST" });
         const completeJson = await completeRes.json();
         if (completeJson.success && completeJson.data) {
           sessionStorage.setItem("dailyQuizResult", JSON.stringify(completeJson.data));
+          router.push("/daily-quiz/report");
+          return;
         }
-      } catch {}
-      router.push("/daily-quiz/report");
+        setCompleteError(true);
+        setCompleting(false);
+      } catch {
+        setCompleteError(true);
+        setCompleting(false);
+      }
       return;
     }
 
@@ -617,6 +675,12 @@ export default function DailyQuizPage() {
             />
           )}
 
+          {completeError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center text-sm text-red-600">
+              提交失败，请重试
+            </div>
+          )}
+
           {feedback && (
             <button
               onClick={handleNext}
@@ -634,7 +698,7 @@ export default function DailyQuizPage() {
                   正在生成报告...
                 </span>
               ) : isLastQuestion ? (
-                "查看报告"
+                completeError ? "重试提交" : "查看报告"
               ) : (
                 "下一题"
               )}

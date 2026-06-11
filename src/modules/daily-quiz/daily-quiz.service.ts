@@ -333,7 +333,7 @@ export const DailyQuizService = {
       progress: {
         currentIndex: currentProgress.currentIndex,
         correctCount: currentProgress.correctCount,
-        total: Object.keys(answerKey.keys).length,
+        total: TARGET_TOTAL,
       },
     };
   },

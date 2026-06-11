@@ -12,7 +12,12 @@ export async function GET(req: NextRequest) {
 
     // 异步触发续生，不阻塞响应（避免 30s 超时）。
     // 节流由 continueGeneration 内部的 continuingAt 锁控制。
-    if (data.status === "partial") {
+    // 注意: in_progress 状态下如果题目未生成完毕也需继续补全，
+    // 因为 submitAnswer 会把 partial/ready → in_progress，但续生可能尚未完成。
+    const needsContinuation = data.quiz
+      && data.quiz.readyCount < data.quiz.totalCount
+      && (data.status === "partial" || data.status === "in_progress");
+    if (needsContinuation) {
       DailyQuizService.continueGeneration(userId).catch(() => {});
     }
 
