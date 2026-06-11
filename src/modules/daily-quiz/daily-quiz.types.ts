@@ -37,8 +37,12 @@ export interface DailyQuizSet {
 }
 
 /**
- * Lightweight answer key stored separately from the full quiz set.
- * Used by submitAnswer to avoid loading the entire 50-question quiz.
+ * 轻量答案索引 — 与完整 QuizSet 分离存储。
+ *
+ * 【用途】submitAnswer 热路径数据源，避免加载完整 QuizSet (~100KB)
+ * 【存储】KV key: dqa_{userId}_{date}，大小 ~2KB
+ * 【更新时机】generateDailyQuiz 首批生成后 + continueGeneration 每批追加后
+ * 【性能收益】submit 延迟从 ~5s 降至 ~1-2s（见 §16.3）
  */
 export interface DailyQuizAnswerKey {
   userId: string;

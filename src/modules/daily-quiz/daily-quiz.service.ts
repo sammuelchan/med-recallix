@@ -242,13 +242,16 @@ export const DailyQuizService = {
   /**
    * 提交答案。使用轻量 AnswerKey 代替加载完整 QuizSet，大幅降低延迟。
    *
-   * 优化前: kvGet(全量QuizSet ~50题) + kvGet(progress) → ~3-5s
+   * 【性能优化】见 docs/DESIGN-daily-quiz.md §16.3
+   * 优化前: kvGet(全量QuizSet ~100KB) + kvGet(progress) → ~3-5s
    * 优化后: kvGet(AnswerKey ~2KB) + kvGet(progress) → ~1-2s
    *
-   * 设计要点:
-   * - currentIndex = 已答题数（answers map 的 size），不依赖前端传入
-   * - 首次答题时 fire-and-forget 更新 quiz status（不阻塞响应）
-   * - 错题权重更新是 fire-and-forget，不阻塞响应
+   * 【关键路径】只有 kvPut(progress) 是同步等待的：
+   * - quiz status 更新 → fire-and-forget（不阻塞）
+   * - 错题权重更新 → fire-and-forget（不阻塞）
+   *
+   * 【幂等性】重复提交同一题会先回退旧答案的 correctCount 影响
+   * 【一致性】total 返回 TARGET_TOTAL(50) 而非 answerKey 当前大小
    */
   async submitAnswer(
     userId: string,
@@ -917,8 +920,12 @@ export const DailyQuizService = {
   },
 
   /**
-   * Build and persist a lightweight answer key from the full question list.
-   * Merges with any existing key (for COW continuation batches).
+   * 构建并持久化轻量答案索引（AnswerKey）。
+   *
+   * AnswerKey 是 submitAnswer 的热路径数据源，只包含答案核对所需的最小字段，
+   * 避免加载完整 QuizSet（~100KB）。每次生成/续生批次后同步更新。
+   *
+   * 采用合并策略：已存在的 key 不覆盖（COW 续生追加新题目时保留旧条目）。
    */
   async syncAnswerKey(
     userId: string,

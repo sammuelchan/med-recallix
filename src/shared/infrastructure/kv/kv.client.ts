@@ -31,11 +31,15 @@ import { getFileKV } from "./kv.local";
  *   - Lazy eviction: expired entries are purged on access; a full sweep
  *     runs when the cache exceeds 500 entries to cap memory usage.
  *
- * The TTL is intentionally short (10 s) to balance latency reduction
- * against data freshness for single-instance deployments.
+ * 分层 TTL 策略（见 docs/DESIGN-daily-quiz.md §16.3）：
+ *   - DEFAULT_CACHE_TTL_MS (10s): 普通读取，保守平衡
+ *   - WRITE_THROUGH_TTL_MS (30s): 刚写入的数据肯定是最新的，可以更长
+ *   - 调用方可通过 kvGet 的 cacheTtl 参数指定更长 TTL（如 AnswerKey 60s）
  */
 
+/** 默认读取缓存 TTL — 适用于可能被外部修改的数据 */
 const DEFAULT_CACHE_TTL_MS = 10_000;
+/** 写入后缓存 TTL — 刚写入的数据不需要短 TTL */
 const WRITE_THROUGH_TTL_MS = 30_000;
 const MAX_CACHE_ENTRIES = 500;
 

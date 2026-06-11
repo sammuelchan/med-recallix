@@ -936,3 +936,125 @@ export const IMPROVEMENT_MESSAGE = (pct: number) =>
 │  "返回首页" "查看统计" │
 └──────────────┘
 ```
+
+---
+
+## 16. 问题分析与修复记录
+
+### 16.1 体验问题：做到10-20题就结束
+
+**现象**：用户做到首批20题（或更少）就触发了"查看报告"，无法做满50题。
+
+**根因分析**：
+
+`handleNext` 中判断"全部完成"的逻辑：
+```javascript
+const noMoreComing = state.status === "ready" || state.status === "in_progress";
+const allDone = nextDisplayIndex >= state.total || (isLastReady && noMoreComing);
+```
+
+- 首次提交答案 → `submitAnswer` 把 quiz status 从 `partial`/`ready` 改为 `in_progress`
+- `noMoreComing` 变为 `true`（把 `in_progress` 视为"不会再有更多题"）
+- 当 `displayIndex + 1 >= readyCount`（首批20题做完），`isLastReady = true`
+- `allDone = true` → 提前触发 complete → 用户只做了20题
+
+**连锁问题**：GET route 只在 `status === "partial"` 时触发 `continueGeneration`，
+`in_progress` 后续生也停了，后续题目永远无法生成。
+
+**修复方案**：
+1. `allDone` 改为只有 `readyCount >= total` 才认为"不会再有更多题"
+2. GET route 在 `in_progress && readyCount < totalCount` 时也触发续生
+3. 前端新增 `in_progress` 状态下的轮询，持续检查新题目
+
+### 16.2 体验问题：选了答案就立即核对
+
+**现象**：点击选项立即提交，无法修改答案，不符合真实考试体验。
+
+**修复方案**：
+- 选项点击 → 只设置选中状态（蓝色高亮 + ring 视觉反馈）
+- 可以点击其他选项换选
+- 显示「确认提交」按钮 → 点击后才 POST submit
+- 提交后选项 disabled，显示对错反馈
+- 「下一题」按钮出现
+
+### 16.3 性能问题：submit 接口耗时 ~5秒
+
+**现象**：`POST /api/daily-quiz/submit` 响应时间约5秒。
+
+**根因分析**：
+
+生产环境 KV 访问链路：
+```
+Next.js API Route → HTTP fetch → EdgeOne Edge Function → KV Storage
+每次 HTTP 代理调用 100ms-2s（含冷启动）
+```
+
+原 `submitAnswer` 流程（3-5 次 KV 操作）：
+1. `kvGet(DailyQuizSet)` — 加载 50 题完整 JSON (~100KB) — 1-3s
+2. `kvGet(DailyQuizProgress)` — ~100ms-1s
+3. `kvPut(DailyQuizProgress)` — ~100ms-1s
+4. `kvPut(DailyQuizSet)` — 可选，写回完整 QuizSet — 1-2s
+
+**优化方案**：
+1. **引入 AnswerKey**：新增 `DailyQuizAnswerKey`（KV key: `dqa_{userId}_{date}`），
+   仅存 `{questionId → answer, explanation, sourceKpId}` 映射（~2KB），
+   submit 不再加载完整 QuizSet
+2. **Fire-and-forget status update**：quiz status 更新改为异步（不阻塞响应）
+3. **分层缓存 TTL**：
+   - AnswerKey 缓存 60s（生成后只追加不修改）
+   - write-through 缓存 30s（刚写入的数据肯定是最新的）
+   - 连续答题时后续 submit 命中缓存，仅需 1 次 kvPut
+
+**优化效果**：
+- 首次 submit: ~1-2s（AnswerKey 2KB + Progress）
+- 后续 submit（30s内）: ~0.5-1s（命中缓存）
+
+### 16.4 性能问题：KV HTTP 代理架构
+
+**背景**：所有 KV 操作在生产环境走 HTTP 代理。
+
+**原因**：
+- EdgeOne KV binding（`globalThis.MED_DATA`）只在 Edge Function 中可用
+- Next.js API routes 运行在 Node.js runtime，无法直接访问 KV binding
+- 解决方案：Edge Function 代理（`edge-functions/api/kv/[[default]].js`）
+
+**当前缓解措施**：
+- 10s read-through 内存缓存
+- 30s write-through 缓存（写入后）
+- 60s AnswerKey 缓存（热路径）
+- 批量读取（`kvBatchGet`）减少调用次数
+
+**未来优化方向**：
+- 将 Next.js API routes 切换为 Edge Runtime，直接访问 KV binding（最彻底）
+- 合并多个 KV 操作为单次 HTTP batch 请求
+
+### 16.5 部署问题：pnpm v10 ERR_PNPM_IGNORED_BUILDS
+
+**现象**：EdgeOne CI 安装失败，`pnpm install` 返回 exit code 1。
+
+**根因**：pnpm v10+ 新增 build script 安全策略，`msw@2.12.14`、
+`sharp@0.34.5`、`unrs-resolver@1.11.1` 的 postinstall 脚本被阻止，
+pnpm 返回非零退出码。
+
+**修复**：
+1. 新增 `pnpm-workspace.yaml`，`allowBuilds` 显式允许三个包
+2. `edgeone.json` install 命令加 `PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS=true`
+
+### 16.6 体验问题：complete 失败时跳转空白报告
+
+**现象**：`POST /api/daily-quiz/complete` 失败时仍跳转报告页，显示"暂无报告数据"。
+
+**修复**：只在 complete 成功时跳转；失败时显示"提交失败，请重试" + 重试按钮。
+
+### 16.7 体验问题：恢复答题时倒计时重置
+
+**现象**：中途退出再进入，倒计时从 75:00 重新开始。
+
+**修复**：从 `progress.startedAt` 计算已用时间，恢复答题时继续倒计时。
+
+### 16.8 数据一致性：submit 返回的 total 不一致
+
+**现象**：submit 返回 `total = answerKey.keys.length`（可能是20-40），
+前端 UI 使用 `total = 50`，两者不一致。
+
+**修复**：submit 统一返回 `TARGET_TOTAL`（50）。
